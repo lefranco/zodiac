@@ -29,8 +29,8 @@ DEBUG = False
 
 EPSILON = 0.00001
 
-COUNTER_MAX = 5000
-COUNTER_MAX2 = 1000
+COUNTER_MAX = 100000
+COUNTER_MAX2 = 100000
 
 ALPHABET = [chr(i) for i in range(ord('a'), ord('z') + 1)]
 
@@ -208,7 +208,7 @@ class Dictionary:
     def quality_from_dictionary(self, clear: str) -> typing.Tuple[float, typing.Dict[int, str]]:
         """ Tells the  of (more or less) clear text from the dictionary (the trie mainly)  """
 
-        def heuristic(word : str) -> float:
+        def heuristic(word: str) -> float:
             """ heuristic for a decision of taking which word(s) """
             return self._log_frequency_table[word] / len(word)
 
@@ -288,7 +288,7 @@ class Cipher:
             self._quadgram_occurence_table[quadgram].append(start)
 
         # a table to speed up for when changing a ngram finding which others are impacted
-        self._quadgram_interaction_table: typing.Dict[str, typing.Dict[int, typing.Set[str]]] = collections.defaultdict(dict)
+        self._quadgram_interaction_table: typing.Dict[str, typing.Dict[int, typing.Set[str]]] = collections.defaultdict(lambda: collections.defaultdict(set))
         for quadgram1, quadgram2 in itertools.permutations(self._quadgram_occurence_table, 2):
             for position in range(NGRAMS):
                 if quadgram1[position] in quadgram2:
@@ -331,7 +331,7 @@ class Cipher:
         return self._quadgram_occurence_table
 
     @property
-    def quadgram_interaction_table(self) -> typing.Dict[str, typing.Set[str]]:
+    def quadgram_interaction_table(self) -> typing.Dict[str, typing.Dict[int, typing.Set[str]]]:
         """ property """
         return self._quadgram_interaction_table
 
@@ -444,8 +444,13 @@ class Attacker:
         for cipher_quad, clear_quad in self._quadgram_allocation_table.items():
             assert DECRYPTER.apply(cipher_quad) == clear_quad
 
-    def _change(self, cipher_quadgram: str, quadgram_killed: str, quadgram_replacing: str) -> None:
-        """ change : we replace for 'cipher_quadgram' corresponding 'quadgram_killed' by 'quadgram_replacing' """
+    def _change(self, cipher_quadgram: str, quadgram_killed: str, quadgram_replacing: str, position: int) -> None:
+        """ change : we replace for 'cipher_quadgram' corresponding 'quadgram_killed' by 'quadgram_replacing' - just one letter change at position 'position' """
+
+        if DEBUG:
+            assert quadgram_killed[:position] == quadgram_replacing[:position]
+            assert quadgram_killed[position + 1:] == quadgram_replacing[position + 1:]
+            assert quadgram_killed[position] != quadgram_replacing[position]
 
         # apply change
         previous_there = self._quadgram_allocation_table[cipher_quadgram]
@@ -462,7 +467,7 @@ class Attacker:
         # and in conflicting
         assert CIPHER is not None
         assert DECRYPTER is not None
-        for impacted_cipher_quadgram in CIPHER.quadgram_interaction_table[cipher_quadgram]:
+        for impacted_cipher_quadgram in CIPHER.quadgram_interaction_table[cipher_quadgram][position]:
             impacted_quadgram_replacing = DECRYPTER.apply(impacted_cipher_quadgram)
             assert len(impacted_quadgram_replacing) == NGRAMS
             impacted_previous_there = self._quadgram_allocation_table[impacted_cipher_quadgram]
@@ -508,20 +513,27 @@ class Attacker:
         counter = 0
         while True:
 
-            # randomly select a 'quadgram_killed' in the table
-            quadgram_killed_list: typing.List[str] = random.choices(list(temp_rating.keys()), weights=list(temp_rating.values()))
-            quadgram_killed = quadgram_killed_list[0]
-
             counter2 = 0
             while True:
+
+                # randomly select a 'quadgram_killed' in the table
+                quadgram_killed_list: typing.List[str] = random.choices(list(temp_rating.keys()), weights=list(temp_rating.values()))
+                quadgram_killed = quadgram_killed_list[0]
 
                 # randomly select a 'cipher_quadgram' corresponding (usually there is only one)
                 cipher_quadgram: str = random.choice(list(self._reverse_quadgram_allocation_table[quadgram_killed]))
 
-                # randomly select a 'quadgram_replacing' : what do we change this quadgram to ?
-                # a quadgram is all the more likely to be chosen that it is more frequent
-                quadgram_replacing_list: typing.List[str] = random.choices(list(NGRAMS_FREQUENCY_TABLE.keys()), weights=list(NGRAMS_FREQUENCY_TABLE.values()))
-                quadgram_replacing = quadgram_replacing_list[0]
+                # randomly select a letter in the quadgram
+                position = random.randint(0, NGRAMS - 1)
+
+                # randomly select a new letter
+                old_letter = quadgram_killed[position]
+                letters = set(ALPHABET) - set([old_letter])
+                letter = random.choice(list(letters))
+
+                quadgram_replacing = quadgram_killed[:position] + letter + quadgram_killed[position + 1:]
+
+                assert len(quadgram_replacing) == len(quadgram_killed)
 
                 # must respect pattern
                 if self._accept(cipher_quadgram, quadgram_replacing):
@@ -529,10 +541,7 @@ class Attacker:
 
                 counter2 += 1
                 if counter2 > COUNTER_MAX2:
-                    print()
-                    print("Giving up... difficult to get a replacing quadgram...")
-                    assert False
-                    break
+                    print("Giving up... difficult find a change...")
 
             if DEBUG:
                 self._check_sanity()
@@ -544,7 +553,7 @@ class Attacker:
             if DEBUG:
                 decrypter_backup = copy.deepcopy(DECRYPTER)
 
-            DECRYPTER.change(cipher_quadgram, quadgram_replacing)
+            DECRYPTER.change(cipher_quadgram[position], quadgram_replacing[position])
 
             # keep a note of quality before change
             old_quadgram_frequency_quality = self._quadgram_frequency_quality
@@ -554,7 +563,7 @@ class Attacker:
                 self_backup = copy.deepcopy(self)
 
             # change now
-            self._change(cipher_quadgram, quadgram_killed, quadgram_replacing)
+            self._change(cipher_quadgram, quadgram_killed, quadgram_replacing, position)
 
             if DEBUG:
                 self._check_sanity()
@@ -576,9 +585,9 @@ class Attacker:
                 break
 
             # no improvement so undo
-            DECRYPTER.change(cipher_quadgram, quadgram_killed)
+            DECRYPTER.change(cipher_quadgram[position], quadgram_killed[position])
 
-            self._change(cipher_quadgram, quadgram_replacing, quadgram_killed)  # pylint:disable=arguments-out-of-order
+            self._change(cipher_quadgram, quadgram_replacing, quadgram_killed, position)  # pylint:disable=arguments-out-of-order
 
             if DEBUG:
                 self._check_sanity()
@@ -620,6 +629,11 @@ class Attacker:
             print(f"{clear}")
 
         print()
+
+    @property
+    def quadgram_frequency_quality(self) -> float:
+        """ property """
+        return self._quadgram_frequency_quality
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Attacker):
@@ -677,7 +691,7 @@ def main() -> None:
         print("Debug mode !")
 
         # show quadgram quality
-        print(f"{ATTACKER._quadgram_frequency_quality=}")
+        print(f"{ATTACKER.quadgram_frequency_quality=}")
 
         # show dictionary quality (and words detected)
         clear = DECRYPTER.apply(CIPHER.cipher_str)
