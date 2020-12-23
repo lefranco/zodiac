@@ -1,0 +1,2 @@
+pout trouver un mot :
+grep -wn <mot> <fichier>
