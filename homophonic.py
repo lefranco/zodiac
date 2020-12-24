@@ -709,8 +709,8 @@ def main() -> None:
         dictionary_quality, selected_words = DICTIONARY.quality_from_dictionary(clear)
 
         if best_dictionary_quality_sofar is None or dictionary_quality > best_dictionary_quality_sofar:
-            print(f"{dictionary_quality=}")
             CIPHER.display_result(selected_words)
+            print(f"{dictionary_quality=}")
             best_dictionary_quality_sofar = dictionary_quality
 
 
