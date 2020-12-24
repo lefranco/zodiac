@@ -530,17 +530,16 @@ class Attacker:
             letter = random.choice(list(letters))
 
             quadgram_replacing = quadgram_killed[:position] + letter + quadgram_killed[position + 1:]
-
             assert len(quadgram_replacing) == len(quadgram_killed)
+
+            # must respect pattern
+            if self._accept(cipher_quadgram, quadgram_replacing):
+                return cipher_quadgram, quadgram_killed, quadgram_replacing, position
 
             attempts_find_change_left -= 1
             if attempts_find_change_left == 0:
                 #  print("Giving up... difficult find a change...")
                 return None
-
-            # must respect pattern
-            if self._accept(cipher_quadgram, quadgram_replacing):
-                return cipher_quadgram, quadgram_killed, quadgram_replacing, position
 
     def climb(self) -> bool:
         """ climb : try to improve things... """
