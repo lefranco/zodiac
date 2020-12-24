@@ -489,11 +489,8 @@ class Attacker:
 
         self._quadgram_frequency_quality = sum([len(CIPHER.quadgram_occurence_table[q]) * NGRAMS_FREQUENCY_TABLE[self._quadgram_allocation_table[q]] for q in self._quadgram_allocation_table])
 
-        # for debug purpose : check sanity after changes
         if DEBUG:
             self._check_sanity()
-
-        if DEBUG:
             # debug check
             qcheck = 0.
             clear = DECRYPTER.apply(CIPHER.cipher_str)
@@ -541,7 +538,7 @@ class Attacker:
                 #  print("Giving up... difficult find a change...")
                 return None
 
-    def climb(self) -> bool:
+    def _climb(self) -> bool:
         """ climb : try to improve things... """
 
         assert DECRYPTER is not None
@@ -565,11 +562,9 @@ class Attacker:
             #  does the change improve things ?
             # -----------------------
 
-            if DEBUG:
-                self._check_sanity()
-
             # for debug purpose : keep record of before
             if DEBUG:
+                self._check_sanity()
                 decrypter_backup = copy.deepcopy(DECRYPTER)
                 self_backup = copy.deepcopy(self)
 
@@ -602,12 +597,9 @@ class Attacker:
             DECRYPTER.change(cipher_quadgram[position], quadgram_killed[position])
             self._change(cipher_quadgram, quadgram_replacing, quadgram_killed, position)  # pylint:disable=arguments-out-of-order
 
-            # for debug purpose : check sanity after changes
-            if DEBUG:
-                self._check_sanity()
-
             # for debug purpose : check we really are back to previous situation
             if DEBUG:
+                self._check_sanity()
                 assert DECRYPTER == decrypter_backup
                 assert self == self_backup
                 # check quality is back as it was
@@ -617,6 +609,18 @@ class Attacker:
 
             # restore value
             self._quadgram_frequency_quality = old_quadgram_frequency_quality
+
+    def ascend(self) -> None:
+        """ ascend : keep climbing until fails to do so """
+
+        while True:
+
+            # keep climbing until fail to do so
+            print(".", end='', flush=True)
+            succeeded = self._climb()
+            if not succeeded:
+                print()
+                return
 
     @property
     def quadgram_frequency_quality(self) -> float:
@@ -697,23 +701,17 @@ def main() -> None:
     while True:
 
         # start a new session
-        print("start a session")
         ATTACKER = Attacker(debug_mode)
+        ATTACKER.ascend()
 
-        while True:
+        # get dictionary quality of result
+        clear = DECRYPTER.apply(CIPHER.cipher_str)
+        dictionary_quality, selected_words = DICTIONARY.quality_from_dictionary(clear)
 
-            # keep climbing until fail to do so
-            print(".", end='', flush=True)
-            ATTACKER.climb()
-
-            # get dictionary quality of result
-            clear = DECRYPTER.apply(CIPHER.cipher_str)
-            dictionary_quality, selected_words = DICTIONARY.quality_from_dictionary(clear)
-
-            if best_dictionary_quality_sofar is None or dictionary_quality > best_dictionary_quality_sofar:
-                print(f"{dictionary_quality=}")
-                CIPHER.display_result(selected_words)
-                best_dictionary_quality_sofar = dictionary_quality
+        if best_dictionary_quality_sofar is None or dictionary_quality > best_dictionary_quality_sofar:
+            print(f"{dictionary_quality=}")
+            CIPHER.display_result(selected_words)
+            best_dictionary_quality_sofar = dictionary_quality
 
 
 if __name__ == '__main__':
