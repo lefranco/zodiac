@@ -25,7 +25,7 @@ import cProfile
 import pstats
 
 PROFILE = False
-DEBUG = True
+DEBUG = False
 
 ALPHABET = [chr(i) for i in range(ord('a'), ord('z') + 1)]
 
