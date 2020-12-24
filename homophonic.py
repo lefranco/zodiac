@@ -25,41 +25,35 @@ import cProfile
 import pstats
 
 PROFILE = False
-DEBUG = False
-
-EPSILON = 0.00001
-
-COUNTER_MAX = 100000
-COUNTER_MAX2 = 100000
+DEBUG = True
 
 ALPHABET = [chr(i) for i in range(ord('a'), ord('z') + 1)]
 
 NGRAMS = 4
 
+EPPSILON_NO_OCCURENCES = 0.1 # zero has - infinite as log, must be << 1
+EPSILON_PROBA = 1 / 1000
+EPSILON_DELTA_FLOAT = 0.000001
 
-def load_frequency_table(filename: str) -> typing.Dict[str, int]:
+def load_frequency_table(filename: str) -> typing.Dict[str, float]:
     """ load_frequency_table """
 
     before = time.time()
 
-    frequency_table: typing.Dict[str, int] = dict()
+    raw_frequency_table: typing.Dict[str, int] = dict()
     with open(filename) as filepointer:
         for line in filepointer:
             line = line.rstrip('\n')
             quadgram_read, frequency_str = line.split()
             quadgram = quadgram_read.lower()
             frequency = int(frequency_str)
-            frequency_table[quadgram] = frequency
+            raw_frequency_table[quadgram] = frequency
 
-    coverage = (len(frequency_table) / (len(ALPHABET) ** NGRAMS)) * 100
+    coverage = (len(raw_frequency_table) / (len(ALPHABET) ** NGRAMS)) * 100
     print(f"Frequency tables covers {coverage:.2f}% of possibilities")
 
-    # covering the rest
-    default_frequency = min(frequency_table.values())
-    for letters in itertools.product(ALPHABET, repeat=NGRAMS):
-        quadgram = ''.join(letters)
-        if quadgram not in frequency_table:
-            frequency_table[quadgram] = default_frequency
+    sum_occurences = sum(raw_frequency_table.values())
+    frequency_table = {''.join(letters): math.log10(raw_frequency_table.get(''.join(letters), EPPSILON_NO_OCCURENCES) / sum_occurences) for letters in itertools.product(ALPHABET, repeat=NGRAMS)}
 
     after = time.time()
     elapsed = after - before
@@ -68,7 +62,7 @@ def load_frequency_table(filename: str) -> typing.Dict[str, int]:
     return frequency_table
 
 
-NGRAMS_FREQUENCY_TABLE: typing.Dict[str, int] = dict()
+NGRAMS_FREQUENCY_TABLE: typing.Dict[str, float] = dict()
 
 
 class Node:
@@ -249,10 +243,7 @@ class Dictionary:
 
     def __str__(self) -> str:
         """ for debug """
-        ret = ""
-        for word, log_freq in self._log_frequency_table.items():
-            ret += f"{word} {log_freq} l / log={len(word)/log_freq}\n"
-        return ret
+        return pprint.pformat(self._log_frequency_table)
 
 
 DICTIONARY: typing.Optional[Dictionary] = None
@@ -384,15 +375,17 @@ class Attacker:
 
     def __init__(self, debug_mode: bool) -> None:
 
-        # make initial random allocation
         assert CIPHER is not None
+        assert DECRYPTER is not None
+        assert DICTIONARY is not None
+
+        # make initial random allocation
         if debug_mode:
             allocation = {k: k for k in CIPHER.cipher_codes}
         else:
             allocation = {k: random.choice(ALPHABET) for k in CIPHER.cipher_codes}
 
         # put it in crypter
-        assert DECRYPTER is not None
         DECRYPTER.install(allocation)
 
         # make table linking clear and cipher quadgrams
@@ -412,7 +405,6 @@ class Attacker:
 
         # dictionary quality
         clear = DECRYPTER.apply(CIPHER.cipher_str)
-        assert DICTIONARY is not None
         new_dict_quality, _ = DICTIONARY.quality_from_dictionary(clear)
         self._dictionary_quality = new_dict_quality
 
@@ -429,9 +421,11 @@ class Attacker:
     def _check_sanity(self) -> None:
         """ _check_sanity (for debug purpose) """
 
+        assert DECRYPTER is not None
+
         assert DEBUG
 
-        # check tables coherent
+        # check tables are coherent between themselves
         for cipher_quad, clear_quad in self._quadgram_allocation_table.items():
             assert cipher_quad in self._reverse_quadgram_allocation_table[clear_quad]
 
@@ -439,13 +433,15 @@ class Attacker:
             for cipher_quad in cipher_quads:
                 assert self._quadgram_allocation_table[cipher_quad] == clear_quad
 
-        # check tables coherent with table in cipher
-        assert DECRYPTER is not None
+        # check tables are coherent with table in cipher
         for cipher_quad, clear_quad in self._quadgram_allocation_table.items():
             assert DECRYPTER.apply(cipher_quad) == clear_quad
 
     def _change(self, cipher_quadgram: str, quadgram_killed: str, quadgram_replacing: str, position: int) -> None:
         """ change : we replace for 'cipher_quadgram' corresponding 'quadgram_killed' by 'quadgram_replacing' - just one letter change at position 'position' """
+
+        assert CIPHER is not None
+        assert DECRYPTER is not None
 
         if DEBUG:
             assert quadgram_killed[:position] == quadgram_replacing[:position]
@@ -465,8 +461,6 @@ class Attacker:
         self._reverse_quadgram_allocation_table[quadgram_replacing].add(cipher_quadgram)
 
         # and in conflicting
-        assert CIPHER is not None
-        assert DECRYPTER is not None
         for impacted_cipher_quadgram in CIPHER.quadgram_interaction_table[cipher_quadgram][position]:
             impacted_quadgram_replacing = DECRYPTER.apply(impacted_cipher_quadgram)
             assert len(impacted_quadgram_replacing) == NGRAMS
@@ -484,36 +478,62 @@ class Attacker:
         """ Evaluates quality from quadgram frequency """
 
         assert CIPHER is not None
-        occurences_clear = dict()
-        for clear_quadgram, ciphers_quadgrams in self._reverse_quadgram_allocation_table.items():
-            occurences_clear[clear_quadgram] = sum([len(CIPHER.quadgram_occurence_table[c]) for c in ciphers_quadgrams])
+        assert DECRYPTER is not None
 
-        total_occurences_clear = sum(occurences_clear.values())
-        frequency_clear = {q: occurences_clear[q] / total_occurences_clear for q in occurences_clear}
+        #  occurences_clear = dict()
+        #  for clear_quadgram, ciphers_quadgrams in self._reverse_quadgram_allocation_table.items():
+        #      occurences_clear[clear_quadgram] = sum([len(CIPHER.quadgram_occurence_table[c]) for c in ciphers_quadgrams])
 
-        occurences_dict = {q: NGRAMS_FREQUENCY_TABLE[q] for q in occurences_clear}
-        total_occurences_dict = sum(occurences_dict.values())
-        frequency_dictionary = {q: occurences_dict[q] / total_occurences_dict for q in occurences_dict}
+        #  total_occurences_clear = sum(occurences_clear.values())
+        #  frequency_clear = {q: occurences_clear[q] / total_occurences_clear for q in occurences_clear}
 
-        self._quadgram_frequency_quality = - sum([abs(frequency_clear[q] - frequency_dictionary[q]) for q in occurences_clear])
+        #  occurences_dict = {q: NGRAMS_FREQUENCY_TABLE[q] for q in occurences_clear}
+        #  total_occurences_dict = sum(occurences_dict.values())
+        #  frequency_dictionary = {q: occurences_dict[q] / total_occurences_dict for q in occurences_dict}
 
-    def climb(self, words_show: bool) -> None:
-        """ climb : try to improve things... """
+        #  self._quadgram_frequency_quality = - sum([abs(frequency_clear[q] - frequency_dictionary[q]) for q in occurences_clear])
 
+        self._quadgram_frequency_quality = sum([len(CIPHER.quadgram_occurence_table[q]) * NGRAMS_FREQUENCY_TABLE[self._quadgram_allocation_table[q]] for q in self._quadgram_allocation_table])
+
+        # for debug purpose : check sanity after changes
         if DEBUG:
             self._check_sanity()
 
-        # select candidate to change
+        if DEBUG:
+            # debug check
+            qcheck = 0.
+            clear = DECRYPTER.apply(CIPHER.cipher_str)
+            for position in range(len(clear) - NGRAMS + 1):
+                quadgram = clear[position: position + NGRAMS]
+                qcheck += NGRAMS_FREQUENCY_TABLE[quadgram]
+            assert abs(qcheck - self._quadgram_frequency_quality) < EPSILON_DELTA_FLOAT
 
-        # build table to choose from : clear quadgram table
-        # a quadgram is all the more likely to be chosen that it is less frequent
-        sum_frequencies = sum([NGRAMS_FREQUENCY_TABLE[q] for q in self._quadgram_allocation_table.values()])
-        temp_rating = {q: sum_frequencies - NGRAMS_FREQUENCY_TABLE[q] for q in self._quadgram_allocation_table.values()}
+    def climb(self) -> None:
+        """ climb : try to improve things... """
 
-        counter = 0
+        assert DECRYPTER is not None
+        assert CIPHER is not None
+
+        # making sure of things
+        EPSILON_PROBA = 1/1000
+
+        # possibilities are 26 * 25 (choice of two letters in alphabet)
+        number = len(ALPHABET) * (len(ALPHABET) - 1)
+        attempts_find_improvement_left = int(math.log(EPSILON_PROBA) / math.log((number - 1) / number))
         while True:
 
-            counter2 = 0
+            # -----------------------
+            # find a possible change
+            # -----------------------
+
+            # build table to choose from : clear quadgram table
+            # a quadgram is all the more likely to be chosen that it is less frequent
+            sum_frequencies = sum([NGRAMS_FREQUENCY_TABLE[q] for q in self._quadgram_allocation_table.values()])
+            temp_rating = {q: sum_frequencies - NGRAMS_FREQUENCY_TABLE[q] for q in self._quadgram_allocation_table.values()}
+
+            # possibilities are number of quadgrams x (size of quadgram - 1)
+            number = len(self._reverse_quadgram_allocation_table) * (NGRAMS - 1)
+            attempts_find_change_left = int(math.log(EPSILON_PROBA) / math.log((number - 1) / number))
             while True:
 
                 # randomly select a 'quadgram_killed' in the table
@@ -535,60 +555,57 @@ class Attacker:
 
                 assert len(quadgram_replacing) == len(quadgram_killed)
 
+                attempts_find_change_left -= 1
+                if attempts_find_change_left == 0:
+                    #print("Giving up... difficult find a change...")
+                    return
+
                 # must respect pattern
                 if self._accept(cipher_quadgram, quadgram_replacing):
                     break
 
-                counter2 += 1
-                if counter2 > COUNTER_MAX2:
-                    print("Giving up... difficult find a change...")
+            # -----------------------
+            #  does the change improve things ?
+            # -----------------------
 
             if DEBUG:
                 self._check_sanity()
 
-            # apply change in decrypter
-            assert DECRYPTER is not None
-
-            # for debug purpose
+            # for debug purpose : keep record of before
             if DEBUG:
                 decrypter_backup = copy.deepcopy(DECRYPTER)
-
-            DECRYPTER.change(cipher_quadgram[position], quadgram_replacing[position])
+                self_backup = copy.deepcopy(self)
 
             # keep a note of quality before change
             old_quadgram_frequency_quality = self._quadgram_frequency_quality
 
-            # for debug purpose
-            if DEBUG:
-                self_backup = copy.deepcopy(self)
-
-            # change now
+            # apply change now
+            DECRYPTER.change(cipher_quadgram[position], quadgram_replacing[position])
             self._change(cipher_quadgram, quadgram_killed, quadgram_replacing, position)
 
+            # for debug purpose : check sanity after changes
             if DEBUG:
                 self._check_sanity()
 
-            # evaluat new quadgram quality
+            # evaluate new quadgram quality
             self._set_quadgram_frequency_quality()
 
             # did the quality improve ?
             if self._quadgram_frequency_quality > old_quadgram_frequency_quality:
-                # yes : stop looping
-                break
+                # yes : stop looping : we have improved
+                continue
 
             # this loop cannot be infinite
-            counter += 1
-            if counter > COUNTER_MAX:
-                print()
-                print("Giving up... difficult to improve quadgram quality...")
-                assert False
-                break
+            attempts_find_improvement_left -= 1
+            if attempts_find_improvement_left == 0:
+                #print("Giving up... difficult to improve quadgram quality...")
+                return
 
             # no improvement so undo
             DECRYPTER.change(cipher_quadgram[position], quadgram_killed[position])
-
             self._change(cipher_quadgram, quadgram_replacing, quadgram_killed, position)  # pylint:disable=arguments-out-of-order
 
+            # for debug purpose : check sanity after changes
             if DEBUG:
                 self._check_sanity()
 
@@ -596,39 +613,13 @@ class Attacker:
             if DEBUG:
                 assert DECRYPTER == decrypter_backup
                 assert self == self_backup
-
-            # for debug purpose
-            if DEBUG:
                 # check quality is back as it was
-                # evaluat new quadgram quality
+                # evaluate new quadgram quality
                 self._set_quadgram_frequency_quality()
-                assert abs(self._quadgram_frequency_quality - old_quadgram_frequency_quality) < EPSILON
+                assert abs(self._quadgram_frequency_quality - old_quadgram_frequency_quality) < EPSILON_DELTA_FLOAT
 
             # restore value
             self._quadgram_frequency_quality = old_quadgram_frequency_quality
-
-        print(f"quadgram quality={self._quadgram_frequency_quality}")
-
-        # get dictionary quality of new situation
-        assert CIPHER is not None
-        clear = DECRYPTER.apply(CIPHER.cipher_str)
-
-        if words_show:
-
-            assert DICTIONARY is not None
-            new_dict_quality, selected_words = DICTIONARY.quality_from_dictionary(clear)
-
-            # change quality
-            self._dictionary_quality = new_dict_quality
-
-            # best visual experience
-            CIPHER.display_result(selected_words)
-
-        else:
-
-            print(f"{clear}")
-
-        print()
 
     @property
     def quadgram_frequency_quality(self) -> float:
@@ -651,21 +642,24 @@ def main() -> None:
     """ main """
 
     parser = argparse.ArgumentParser()
+    parser.add_argument('-s', '--seed', required=False, help='seed random generator to value')
     parser.add_argument('-f', '--frequency', required=True, help='input a file with frequency table for quadgrams (n-letters)')
     parser.add_argument('-d', '--dictionary', required=True, help='dictionary to use')
     parser.add_argument('-l', '--limit', required=False, help='limit in number of words loaded')
     parser.add_argument('-c', '--cipher', required=True, help='cipher to attack')
-    parser.add_argument('-w', '--words_show', required=False, help='show words of clear in real time', action='store_true')
     parser.add_argument('-D', '--debug', required=False, help='give altitude of cipher taken as clear obtained', action='store_true')
     args = parser.parse_args()
 
-    seed = time.time()
-    #  seed = 0
+    #  seed = time.time()
+    seed = args.seed
+    if seed is None:
+        seed = time.time()
     random.seed(seed)
 
     frequency_file = args.frequency
     global NGRAMS_FREQUENCY_TABLE
     NGRAMS_FREQUENCY_TABLE = load_frequency_table(frequency_file)
+    #  pprint.pprint(NGRAMS_FREQUENCY_TABLE)
 
     dictionary_file = args.dictionary
     limit = int(args.limit) if args.limit is not None else None
@@ -679,15 +673,16 @@ def main() -> None:
     cipher_file = args.cipher
     global CIPHER
     CIPHER = Cipher(cipher_file, debug_mode)
+    print(f"{CIPHER}")
 
     global DECRYPTER
     DECRYPTER = Decrypter(CIPHER.cipher_codes)
 
     global ATTACKER
-    ATTACKER = Attacker(debug_mode)
 
     if debug_mode:
 
+        ATTACKER = Attacker(debug_mode)
         print("Debug mode !")
 
         # show quadgram quality
@@ -699,13 +694,29 @@ def main() -> None:
         print(f"{dictionary_quality=}")
         CIPHER.display_result(selected_words)
 
-        print()
         return
 
-    words_show = args.words_show
-
+    best_dictionary_quality_sofar: typing.Optional[float] = None
     while True:
-        ATTACKER.climb(words_show)
+
+        # start a new session
+        print("start a session")
+        ATTACKER = Attacker(debug_mode)
+
+        while True:
+
+            # keep climbing until fail to do so
+            print(".", end='', flush=True)
+            ATTACKER.climb()
+
+            # get dictionary quality of result
+            clear = DECRYPTER.apply(CIPHER.cipher_str)
+            dictionary_quality, selected_words = DICTIONARY.quality_from_dictionary(clear)
+
+            if best_dictionary_quality_sofar is None or dictionary_quality > best_dictionary_quality_sofar:
+                print(f"{dictionary_quality=}")
+                CIPHER.display_result(selected_words)
+                best_dictionary_quality_sofar = dictionary_quality
 
 
 if __name__ == '__main__':
