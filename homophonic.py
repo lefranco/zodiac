@@ -554,6 +554,7 @@ class Attacker:
 
             hold = self._find_hold()
             if hold is None:
+                print("\\", end='', flush=True)
                 return False
 
             cipher_quadgram, quadgram_killed, quadgram_replacing, position = hold
@@ -591,6 +592,7 @@ class Attacker:
             attempts_find_improvement_left -= 1
             if attempts_find_improvement_left == 0:
                 #  print("Giving up... difficult to improve quadgram quality...")
+                print("-", end='', flush=True)
                 return False
 
             # no improvement so undo
@@ -616,11 +618,11 @@ class Attacker:
         while True:
 
             # keep climbing until fail to do so
-            print(".", end='', flush=True)
             succeeded = self._climb()
             if not succeeded:
                 print()
                 return
+            print("/", end='', flush=True)
 
     @property
     def quadgram_frequency_quality(self) -> float:
