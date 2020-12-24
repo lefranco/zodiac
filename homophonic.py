@@ -31,9 +31,10 @@ ALPHABET = [chr(i) for i in range(ord('a'), ord('z') + 1)]
 
 NGRAMS = 4
 
-EPPSILON_NO_OCCURENCES = 0.1 # zero has - infinite as log, must be << 1
-EPSILON_PROBA = 1 / 1000
-EPSILON_DELTA_FLOAT = 0.000001
+EPSILON_NO_OCCURENCES = 0.1  # zero has - infinite as log, must be << 1
+EPSILON_PROBA = 1 / 1000  # to make sure we can give up searching
+EPSILON_DELTA_FLOAT = 0.000001  # to compare floats
+
 
 def load_frequency_table(filename: str) -> typing.Dict[str, float]:
     """ load_frequency_table """
@@ -53,7 +54,13 @@ def load_frequency_table(filename: str) -> typing.Dict[str, float]:
     print(f"Frequency tables covers {coverage:.2f}% of possibilities")
 
     sum_occurences = sum(raw_frequency_table.values())
-    frequency_table = {''.join(letters): math.log10(raw_frequency_table.get(''.join(letters), EPPSILON_NO_OCCURENCES) / sum_occurences) for letters in itertools.product(ALPHABET, repeat=NGRAMS)}
+
+    # for normal values
+    frequency_table = {q: math.log10(raw_frequency_table[q] / sum_occurences) for q in raw_frequency_table}
+
+    # complete for absent values
+    def_log_value = math.log10(EPSILON_NO_OCCURENCES / sum_occurences)
+    frequency_table.update({''.join(letters): def_log_value for letters in itertools.product(ALPHABET, repeat=NGRAMS) if ''.join(letters) not in frequency_table})
 
     after = time.time()
     elapsed = after - before
@@ -480,19 +487,6 @@ class Attacker:
         assert CIPHER is not None
         assert DECRYPTER is not None
 
-        #  occurences_clear = dict()
-        #  for clear_quadgram, ciphers_quadgrams in self._reverse_quadgram_allocation_table.items():
-        #      occurences_clear[clear_quadgram] = sum([len(CIPHER.quadgram_occurence_table[c]) for c in ciphers_quadgrams])
-
-        #  total_occurences_clear = sum(occurences_clear.values())
-        #  frequency_clear = {q: occurences_clear[q] / total_occurences_clear for q in occurences_clear}
-
-        #  occurences_dict = {q: NGRAMS_FREQUENCY_TABLE[q] for q in occurences_clear}
-        #  total_occurences_dict = sum(occurences_dict.values())
-        #  frequency_dictionary = {q: occurences_dict[q] / total_occurences_dict for q in occurences_dict}
-
-        #  self._quadgram_frequency_quality = - sum([abs(frequency_clear[q] - frequency_dictionary[q]) for q in occurences_clear])
-
         self._quadgram_frequency_quality = sum([len(CIPHER.quadgram_occurence_table[q]) * NGRAMS_FREQUENCY_TABLE[self._quadgram_allocation_table[q]] for q in self._quadgram_allocation_table])
 
         # for debug purpose : check sanity after changes
@@ -508,14 +502,50 @@ class Attacker:
                 qcheck += NGRAMS_FREQUENCY_TABLE[quadgram]
             assert abs(qcheck - self._quadgram_frequency_quality) < EPSILON_DELTA_FLOAT
 
-    def climb(self) -> None:
-        """ climb : try to improve things... """
+    def _find_hold(self) -> typing.Optional[typing.Tuple[str, str, str, int]]:
+
+        """ Find a  holds that leads to a possible change from this situation """
 
         assert DECRYPTER is not None
         assert CIPHER is not None
 
-        # making sure of things
-        EPSILON_PROBA = 1/1000
+        # possibilities are number of quadgrams x (size of quadgram - 1)
+        number = len(self._reverse_quadgram_allocation_table) * (NGRAMS - 1)
+        attempts_find_change_left = int(math.log(EPSILON_PROBA) / math.log((number - 1) / number))
+
+        while True:
+
+            # randomly select a 'quadgram_killed' in the table
+            quadgram_killed = random.choice(list(self._quadgram_allocation_table.values()))
+
+            # randomly select a 'cipher_quadgram' corresponding (usually there is only one)
+            cipher_quadgram = random.choice(list(self._reverse_quadgram_allocation_table[quadgram_killed]))
+
+            # randomly select a letter in the quadgram
+            position = random.randint(0, NGRAMS - 1)
+
+            # randomly select a new letter
+            old_letter = quadgram_killed[position]
+            letters = set(ALPHABET) - set([old_letter])
+            letter = random.choice(list(letters))
+
+            quadgram_replacing = quadgram_killed[:position] + letter + quadgram_killed[position + 1:]
+
+            assert len(quadgram_replacing) == len(quadgram_killed)
+
+            attempts_find_change_left -= 1
+            if attempts_find_change_left == 0:
+                #  print("Giving up... difficult find a change...")
+                return None
+
+            # must respect pattern
+            if self._accept(cipher_quadgram, quadgram_replacing):
+                return cipher_quadgram, quadgram_killed, quadgram_replacing, position
+
+    def climb(self) -> bool:
+        """ climb : try to improve things... """
+
+        assert DECRYPTER is not None
 
         # possibilities are 26 * 25 (choice of two letters in alphabet)
         number = len(ALPHABET) * (len(ALPHABET) - 1)
@@ -526,43 +556,11 @@ class Attacker:
             # find a possible change
             # -----------------------
 
-            # build table to choose from : clear quadgram table
-            # a quadgram is all the more likely to be chosen that it is less frequent
-            sum_frequencies = sum([NGRAMS_FREQUENCY_TABLE[q] for q in self._quadgram_allocation_table.values()])
-            temp_rating = {q: sum_frequencies - NGRAMS_FREQUENCY_TABLE[q] for q in self._quadgram_allocation_table.values()}
+            hold = self._find_hold()
+            if hold is None:
+                return False
 
-            # possibilities are number of quadgrams x (size of quadgram - 1)
-            number = len(self._reverse_quadgram_allocation_table) * (NGRAMS - 1)
-            attempts_find_change_left = int(math.log(EPSILON_PROBA) / math.log((number - 1) / number))
-            while True:
-
-                # randomly select a 'quadgram_killed' in the table
-                quadgram_killed_list: typing.List[str] = random.choices(list(temp_rating.keys()), weights=list(temp_rating.values()))
-                quadgram_killed = quadgram_killed_list[0]
-
-                # randomly select a 'cipher_quadgram' corresponding (usually there is only one)
-                cipher_quadgram: str = random.choice(list(self._reverse_quadgram_allocation_table[quadgram_killed]))
-
-                # randomly select a letter in the quadgram
-                position = random.randint(0, NGRAMS - 1)
-
-                # randomly select a new letter
-                old_letter = quadgram_killed[position]
-                letters = set(ALPHABET) - set([old_letter])
-                letter = random.choice(list(letters))
-
-                quadgram_replacing = quadgram_killed[:position] + letter + quadgram_killed[position + 1:]
-
-                assert len(quadgram_replacing) == len(quadgram_killed)
-
-                attempts_find_change_left -= 1
-                if attempts_find_change_left == 0:
-                    #print("Giving up... difficult find a change...")
-                    return
-
-                # must respect pattern
-                if self._accept(cipher_quadgram, quadgram_replacing):
-                    break
+            cipher_quadgram, quadgram_killed, quadgram_replacing, position = hold
 
             # -----------------------
             #  does the change improve things ?
@@ -593,13 +591,13 @@ class Attacker:
             # did the quality improve ?
             if self._quadgram_frequency_quality > old_quadgram_frequency_quality:
                 # yes : stop looping : we have improved
-                continue
+                return True
 
             # this loop cannot be infinite
             attempts_find_improvement_left -= 1
             if attempts_find_improvement_left == 0:
-                #print("Giving up... difficult to improve quadgram quality...")
-                return
+                #  print("Giving up... difficult to improve quadgram quality...")
+                return False
 
             # no improvement so undo
             DECRYPTER.change(cipher_quadgram[position], quadgram_killed[position])
