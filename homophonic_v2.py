@@ -17,6 +17,7 @@ import itertools
 import random
 import typing
 import math
+import functools
 import pprint
 
 import cProfile
@@ -29,7 +30,7 @@ DEBUG = False
 ALPHABET = [chr(i) for i in range(ord('a'), ord('z') + 1)]
 
 
-EPSILON_NO_OCCURENCES = 0.1  # zero has - infinite as log, must be << 1
+EPSILON_NO_OCCURENCES = 1e-99  # zero has - infinite as log, must be << 1
 
 
 class Ngrams:
@@ -114,7 +115,7 @@ class Dictionary:
 
         # pass two : enter data
         sum_occurences = sum(raw_frequency_table.values())
-        self._log_frequency_table = {w: math.log(raw_frequency_table[w] / sum_occurences) for w in raw_frequency_table}
+        self._log_frequency_table = {w: math.log10(raw_frequency_table[w] / sum_occurences) for w in raw_frequency_table}
         self._worst_frequency = math.log10(EPSILON_NO_OCCURENCES / sum_occurences)
 
         # longest word
@@ -124,33 +125,37 @@ class Dictionary:
         elapsed = after - before
         print(f"Word list file '{filename}' loaded in {elapsed:2.2f} seconds")
 
+        #print(f"{self._log_frequency_table=}")
 
-    def detected_words(self, plain: str) -> typing.Dict[int, str]:
+
+    def detected_words(self, plain: str) -> typing.List[str]:
         """ Tells the  of (more or less) plain text from the dictionary  """
 
-        words = dict()
-        start = 0
+        def probability(words: typing.Tuple[str]) -> float:
+            """ Quality of a list of word (probability) """
+            res =  sum(map(lambda w: self._log_frequency_table.get(w, self._worst_frequency), words))
+            #print(f"probability({words}) --> {res}")
+            return res
 
-        score_debug = 0.
+        @functools.lru_cache(maxsize=None)
+        def splits(text: str) -> typing.List[typing.Tuple[str, str]]:
+            """ All ways to split some text into a first word and remainder """
+            return [(text[:cut+1], text[cut+1:]) for cut in range(min(self._longest_word, len(text)))]
 
-        while True:
+        @functools.lru_cache(maxsize=None)
+        def segment_rec(n:int, text: str) -> typing.List[str]:
+            """ Best segmentation of text into words, by probability. """
 
-            if start == len(plain):
-                break
+            #print(f"{' '*n}segment_rec({text})")
 
-            for length in range(min(self._longest_word, len(plain) - start), 0, -1):
-                word = plain[start: start + length]
-                if word in self._log_frequency_table:
-                    words[start] = word
-                    start += length
-                    score_debug += self._log_frequency_table[word]
-                    break
-            else:
-                start += 1
+            if text == "":
+                return list()
 
-        print(f"{score_debug=}")
+            candidates = [[first] + segment_rec(n+1, rest) for first, rest in splits(text)]
 
-        return words
+            return max(candidates, key=probability)
+
+        return segment_rec(0,plain)
 
 
     def __str__(self) -> str:
@@ -188,27 +193,6 @@ class Cipher:
         # a table where how many times ngram appears
         self._cipher_str = ''.join(self._content)
         self._quadgram_number_occurence_table = collections.Counter([self._cipher_str[p: p + NGRAMS.size] for p in range(len(self._cipher_str) - (NGRAMS.size - 1))])
-
-    def display_result(self, selected_words: typing.Dict[int, str]) -> None:
-        """ Display in a plain form the result of decoding """
-        pos = 0
-        junk_before = False
-        while True:
-            assert pos <= len(self._cipher_str)
-            if pos == len(self._cipher_str):
-                break
-            if pos in selected_words:
-                if junk_before:
-                    print(' ', end='')
-                word = selected_words[pos]
-                print(word, end=' ')
-                pos += len(word)
-                junk_before = False
-            else:
-                print('?', end='')
-                pos += 1
-                junk_before = True
-        print()
 
     @property
     def cipher_codes(self) -> typing.List[str]:
@@ -303,7 +287,6 @@ def main() -> None:
         DECRYPTER.install(identity)
         plain = DECRYPTER.apply()
         detected_words = DICTIONARY.detected_words(plain)
-        cipher.display_result(detected_words)
         print(f"{detected_words=}")
 
     # attacker : TODO
