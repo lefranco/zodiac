@@ -24,7 +24,7 @@ import cProfile
 import pstats
 
 PROFILE = False
-DEBUG = True
+DEBUG = False
 
 RECURSION_LIMIT = 1500  # default is 1000
 
@@ -411,6 +411,11 @@ class Attacker:
                 return
             print("/", end='', flush=True)
 
+    @property
+    def overall_quadgrams_frequency_quality(self) -> float:
+        """ property """
+        return self._overall_quadgrams_frequency_quality
+
 
 ATTACKER: typing.Optional[Attacker] = None
 
@@ -463,7 +468,7 @@ def main() -> None:
         CIPHER.show_plain(selected_words)
         return
 
-    best_dictionary_quality_sofar: typing.Optional[float] = None
+    best_trigram_quality_sofar: typing.Optional[float] = None
     while True:
 
         # start a new session
@@ -475,10 +480,10 @@ def main() -> None:
         clear = DECRYPTER.apply()
         dictionary_quality, selected_words = DICTIONARY.extracted_words(clear)
 
-        if best_dictionary_quality_sofar is None or dictionary_quality > best_dictionary_quality_sofar:
+        if best_trigram_quality_sofar is None or ATTACKER.overall_quadgrams_frequency_quality > best_trigram_quality_sofar:
             print(f"{dictionary_quality=}")
             CIPHER.show_plain(selected_words)
-            best_dictionary_quality_sofar = dictionary_quality
+            best_trigram_quality_sofar = ATTACKER.overall_quadgrams_frequency_quality
 
 
 if __name__ == '__main__':
@@ -492,7 +497,13 @@ if __name__ == '__main__':
 
     # this to know how long it takes
     BEFORE = time.time()
-    main()
+
+    print("Press Ctrl+C to stop program")
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("Ctrl+C detected !")
+
     AFTER = time.time()
     ELAPSED = AFTER - BEFORE
     #  how long it took
