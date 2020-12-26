@@ -125,17 +125,13 @@ class Dictionary:
         elapsed = after - before
         print(f"Word list file '{filename}' loaded in {elapsed:2.2f} seconds")
 
-        #print(f"{self._log_frequency_table=}")
-
 
     def detected_words(self, plain: str) -> typing.List[str]:
         """ Tells the  of (more or less) plain text from the dictionary  """
 
-        def probability(words: typing.Tuple[str]) -> float:
+        def words_probability(words: typing.Tuple[str]) -> float:
             """ Quality of a list of word (probability) """
-            res =  sum(map(lambda w: self._log_frequency_table.get(w, self._worst_frequency), words))
-            #print(f"probability({words}) --> {res}")
-            return res
+            return sum(map(lambda w: self._log_frequency_table.get(w, self._worst_frequency), words))
 
         @functools.lru_cache(maxsize=None)
         def splits(text: str) -> typing.List[typing.Tuple[str, str]]:
@@ -143,19 +139,16 @@ class Dictionary:
             return [(text[:cut+1], text[cut+1:]) for cut in range(min(self._longest_word, len(text)))]
 
         @functools.lru_cache(maxsize=None)
-        def segment_rec(n:int, text: str) -> typing.List[str]:
+        def segment_rec(text: str) -> typing.List[str]:
             """ Best segmentation of text into words, by probability. """
 
-            #print(f"{' '*n}segment_rec({text})")
-
-            if text == "":
+            if not text:
                 return list()
 
-            candidates = [[first] + segment_rec(n+1, rest) for first, rest in splits(text)]
+            candidates = [[first] + segment_rec(rest) for first, rest in splits(text)]
+            return max(candidates, key=words_probability)
 
-            return max(candidates, key=probability)
-
-        return segment_rec(0,plain)
+        return segment_rec(plain)
 
 
     def __str__(self) -> str:
