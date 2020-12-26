@@ -32,6 +32,7 @@ ALPHABET = [chr(i) for i in range(ord('a'), ord('z') + 1)]
 
 EPSILON_NO_OCCURENCES = 1e-99  # zero has - infinite as log, must be << 1
 
+RECURSION_LIMIT = 1500 # default is 1000
 
 class Ngrams:
     """ Ngrams : says the frequency of N grams (log (occurences / sum all) """
@@ -281,11 +282,15 @@ def main() -> None:
         plain = DECRYPTER.apply()
         detected_words = DICTIONARY.detected_words(plain)
         print(f"{detected_words=}")
+        return
 
     # attacker : TODO
 
 
 if __name__ == '__main__':
+
+    import sys
+    sys.setrecursionlimit(RECURSION_LIMIT)
 
     # this if script too slow and profile it
     if PROFILE:
