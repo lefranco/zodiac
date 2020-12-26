@@ -63,9 +63,7 @@ class Ngrams:
         # for normal values
         self._log_freq_table = {q: math.log10(raw_frequency_table[q] / sum_occurences) for q in raw_frequency_table}
 
-        # complete for absent values
-        def_log_value = math.log10(EPSILON_NO_OCCURENCES / sum_occurences)
-        self._log_freq_table.update({''.join(letters): def_log_value for letters in itertools.product(ALPHABET, repeat=self._size) if ''.join(letters) not in self._log_freq_table})
+        self._worst_frequency = math.log10(EPSILON_NO_OCCURENCES / sum_occurences)
 
         after = time.time()
         elapsed = after - before
@@ -80,6 +78,11 @@ class Ngrams:
     def log_freq_table(self) -> typing.Dict[str, float]:
         """ property """
         return self._log_freq_table
+
+    @property
+    def worst_frequency(self) -> float:
+        """ property """
+        return self._worst_frequency
 
     def __str__(self) -> str:
         """ for debug """
@@ -304,7 +307,7 @@ class Attacker:
             plain = DECRYPTER.decode_some(quadgram)
 
             # remembered
-            self._quadgrams_frequency_quality_table[quadgram] = NGRAMS.log_freq_table[plain] * CIPHER.quadgrams_number_occurence_table[quadgram]
+            self._quadgrams_frequency_quality_table[quadgram] = NGRAMS.log_freq_table.get(plain, NGRAMS.worst_frequency) * CIPHER.quadgrams_number_occurence_table[quadgram]
 
         # quadgram overall frequency quality of cipher
         # summed
@@ -351,7 +354,7 @@ class Attacker:
                 plain = DECRYPTER.decode_some(quadgram)
 
                 # new value
-                new_value = NGRAMS.log_freq_table[plain] * CIPHER.quadgrams_number_occurence_table[quadgram]
+                new_value = NGRAMS.log_freq_table.get(plain, NGRAMS.worst_frequency) * CIPHER.quadgrams_number_occurence_table[quadgram]
 
                 # remembered
                 self._quadgrams_frequency_quality_table[quadgram] = new_value
