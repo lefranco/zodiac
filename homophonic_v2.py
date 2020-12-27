@@ -298,7 +298,7 @@ class Decrypter:
 
     def decode_some(self, cipher_part: str) -> str:
         """ decode """
-        return ''.join(map(lambda c: self._table[c], cipher_part))
+        return ''.join([self._table[c] for c in cipher_part])
 
     def apply(self) -> str:
         """ apply the table (get a new plain from a cipher) """
