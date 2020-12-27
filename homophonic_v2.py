@@ -402,6 +402,11 @@ class Attacker:
         random.shuffle(clears_shuffled)
         allocation = {c: p for c,p in zip(CIPHER.cipher_codes, clears_shuffled)}
 
+        # complete if allocation has less letters than alphabet
+        if len(allocation) < len(ALPHABET):
+            for num, plain in set(clears_shuffled) - set(ALPHABET):
+                allocation[f'__{num}__'] = plain
+
         # put it in crypter
         DECRYPTER.install(allocation)
 
