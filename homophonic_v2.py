@@ -291,6 +291,7 @@ class Decrypter:
 
     def install(self, allocation: typing.Dict[str, str]) -> None:
         """ install an initial table """
+        assert ALLOCATOR is not None
         self._reverse_table = {p: set() for p in ALLOCATOR.allocated}
         for cipher, plain in allocation.items():
             self._table[cipher] = plain
@@ -401,19 +402,16 @@ class Attacker:
         # make initial random allocation
         clears_shuffled = copy.copy(ALLOCATOR.allocated)
         random.shuffle(clears_shuffled)
-        allocation = {c: p for c,p in zip(CIPHER.cipher_codes, clears_shuffled)}
+        allocation = dict(zip(CIPHER.cipher_codes, clears_shuffled))
 
         # complete if allocation has less letters than alphabet
-        if len(allocation) < len(ALPHABET):
-            for num, plain in set(clears_shuffled) - set(ALPHABET):
-                allocation[f'__{num}__'] = plain
+        if 0:
+            if len(allocation) < len(ALPHABET):
+                for num, plain in enumerate(set(ALPHABET) - set(clears_shuffled)):
+                    allocation[f'__{num}__'] = plain
 
         # put it in crypter
         DECRYPTER.install(allocation)
-
-        #print("after install")
-        #print(DECRYPTER)
-        #print("++++")
 
         # a table for remembering frequencies
         self._quadgrams_frequency_quality_table: typing.Dict[str, float] = dict()
@@ -459,10 +457,6 @@ class Attacker:
         assert DECRYPTER is not None
 
         DECRYPTER.swap(cipher1, cipher2)
-
-        #print(f"after swap of {cipher1=} {cipher2=}")
-        #print(DECRYPTER)
-        #print("====")
 
         # effect
 
