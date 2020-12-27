@@ -24,7 +24,7 @@ import cProfile
 import pstats
 
 PROFILE = False
-DEBUG = True
+DEBUG = False
 
 RECURSION_LIMIT = 1500  # default is 1000
 
@@ -330,7 +330,7 @@ class Decrypter:
 
     def as_key(self) -> str:
         """ as_key """
-        return self.decode_some("".join(sorted(self._table.keys())))
+        return ''.join([list(self._reverse_table[p])[0] for p in ALPHABET if p in self._reverse_table])
 
     @property
     def reverse_table(self) -> typing.Dict[str, typing.Set[str]]:
@@ -647,6 +647,9 @@ def main() -> None:
                 now = time.time()
                 speed = N_OPERATIONS / (now - start_time)
                 print(f"{speed=}")
+                key = DECRYPTER.as_key().upper()
+                score = ATTACKER.overall_quadgrams_frequency_quality
+                print(f"{key=} {score=}")
                 best_trigram_quality_sofar = ATTACKER.overall_quadgrams_frequency_quality
 
             # TODO : stop at some point inner hill climb
