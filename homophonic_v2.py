@@ -13,18 +13,18 @@ import sys
 import time
 import argparse
 import collections
-import itertools
 import random
 import typing
 import math
 import functools
+import copy
 import pprint
 
 import cProfile
 import pstats
 
 PROFILE = False
-DEBUG = False
+DEBUG = True
 
 RECURSION_LIMIT = 1500  # default is 1000
 
@@ -32,6 +32,40 @@ ALPHABET = [chr(i) for i in range(ord('a'), ord('z') + 1)]  # plain always lower
 EPSILON_NO_OCCURENCES = 1e-99  # zero has - infinite as log, must be << 1
 EPSILON_DELTA_FLOAT = 0.000001  # to compare floats
 EPSILON_PROBA = 1 / 1000  # to make sure we can give up searching
+
+
+class Letters:
+    """ Ngrams : says the frequency of letters """
+
+    def __init__(self, filename: str):
+
+        raw_frequency_table: typing.Dict[str, int] = dict()
+        with open(filename) as filepointer:
+            for line in filepointer:
+                line = line.rstrip('\n')
+                letter_read, letter_str = line.split()
+                letter = letter_read.lower()
+                frequency = int(letter_str)
+                raw_frequency_table[letter] = frequency
+
+        assert len(raw_frequency_table) == len(ALPHABET)
+
+        sum_occurences = sum(raw_frequency_table.values())
+
+        # for normal values
+        self._freq_table = {q: (raw_frequency_table[q] / sum_occurences) * 100 for q in raw_frequency_table}
+
+    @property
+    def freq_table(self) -> typing.Dict[str, float]:
+        """ property """
+        return self._freq_table
+
+    def __str__(self) -> str:
+        """ for debug """
+        return pprint.pformat(self._freq_table)
+
+
+LETTERS: typing.Optional[Letters] = None
 
 
 class Ngrams:
@@ -95,7 +129,7 @@ NGRAMS: typing.Optional[Ngrams] = None
 class Dictionary:
     """ Stores the list of word. Say how many words in tempted plain """
 
-    def __init__(self, filename: str, limit: typing.Optional[int]) -> None:
+    def __init__(self, filename: str) -> None:
 
         before = time.time()
 
@@ -118,9 +152,6 @@ class Dictionary:
                 frequency = int(frequency_str)
                 raw_frequency_table[word] = frequency
                 line_num += 1
-
-                if limit is not None and len(raw_frequency_table) == limit:
-                    break
 
         # pass two : enter data
         sum_occurences = sum(raw_frequency_table.values())
@@ -254,12 +285,16 @@ class Decrypter:
 
     def __init__(self) -> None:
         assert CIPHER is not None
+        assert ALLOCATOR is not None
         self._table = {c: '' for c in CIPHER.cipher_codes}
+        self._reverse_table: typing.Dict[str, typing.Set[str]] = {p: set() for p in ALLOCATOR.allocated}
 
     def install(self, allocation: typing.Dict[str, str]) -> None:
         """ install an initial table """
+        self._reverse_table = {p: set() for p in ALLOCATOR.allocated}
         for cipher, plain in allocation.items():
             self._table[cipher] = plain
+            self._reverse_table[plain].add(cipher)
 
     def decode_some(self, cipher_part: str) -> str:
         """ decode """
@@ -272,13 +307,84 @@ class Decrypter:
 
     def swap(self, cipher1: str, cipher2: str) -> None:
         """ swap """
+
+        # note the plains
+        plain1 = self._table[cipher1]
+        plain2 = self._table[cipher2]
+
+        # just a little check
+        assert plain1 != plain2
+
+        # swap
         self._table[cipher1], self._table[cipher2] = self._table[cipher2], self._table[cipher1]
+
+        # move ciphers in table from plain
+
+        # cipĥer1
+        self._reverse_table[plain1].remove(cipher1)
+        self._reverse_table[plain2].add(cipher1)
+
+        # cipĥer2
+        self._reverse_table[plain2].remove(cipher2)
+        self._reverse_table[plain1].add(cipher2)
+
+    def as_key(self) -> str:
+        """ as_key """
+        return self.decode_some("".join(sorted(self._table.keys())))
+
+    @property
+    def reverse_table(self) -> typing.Dict[str, typing.Set[str]]:
+        """ property """
+        return self._reverse_table
+
+    def __str__(self) -> str:
+        return "\n".join([pprint.pformat(self._table), pprint.pformat(self._reverse_table)])
+
+
+DECRYPTER: typing.Optional[Decrypter] = None
+
+
+class Allocator:
+    """ An allocator : says how many ciphers could be allocated to every alphabet letter """
+
+    def __init__(self) -> None:
+
+        assert CIPHER is not None
+        assert LETTERS is not None
+
+        #  how many different codes
+        number_codes = len(CIPHER.cipher_codes)
+
+        if number_codes > len(ALPHABET):
+            print("This is a real homophonic, more ciphert codes than the alphabet")
+            print("Sorry, not implemented. YET!")
+            sys.exit(0)
+
+        sorted_letters = sorted(LETTERS.freq_table, key=lambda l: LETTERS.freq_table[l], reverse=True)  # type: ignore
+        self._table = {ll: 1 for ll in sorted_letters[:number_codes]}
+        self._allocated = list(self._table.keys())
+
+    def swap(self, letter1: str, letter2: str) -> None:
+        """ swap """
+        assert letter1 != letter2
+        # TODO : swap letters in allocator
+
+    @property
+    def allocated(self) -> typing.List[str]:
+        """ property """
+        return self._allocated
+
+    @property
+    def table(self) -> typing.Dict[str, int]:
+        """ property """
+        return self._table
 
     def __str__(self) -> str:
         return pprint.pformat(self._table)
 
 
-DECRYPTER: typing.Optional[Decrypter] = None
+ALLOCATOR: typing.Optional[Allocator] = None
+N_OPERATIONS = 0
 
 
 class Attacker:
@@ -286,16 +392,22 @@ class Attacker:
 
     def __init__(self) -> None:
 
-        assert DICTIONARY is not None
+        assert ALLOCATOR is not None
         assert CIPHER is not None
         assert DECRYPTER is not None
         assert NGRAMS is not None
 
         # make initial random allocation
-        allocation = {k: random.choice(ALPHABET) for k in CIPHER.cipher_codes}
+        clears_shuffled = copy.copy(ALLOCATOR.allocated)
+        random.shuffle(clears_shuffled)
+        allocation = {c: p for c,p in zip(CIPHER.cipher_codes, clears_shuffled)}
 
         # put it in crypter
         DECRYPTER.install(allocation)
+
+        #print("after install")
+        #print(DECRYPTER)
+        #print("++++")
 
         # a table for remembering frequencies
         self._quadgrams_frequency_quality_table: typing.Dict[str, float] = dict()
@@ -329,7 +441,7 @@ class Attacker:
         plain = DECRYPTER.apply()
         for position in range(len(plain) - NGRAMS.size + 1):
             quadgram = plain[position: position + NGRAMS.size]
-            qcheck += NGRAMS.log_freq_table[quadgram]
+            qcheck += NGRAMS.log_freq_table.get(quadgram, NGRAMS.worst_frequency)
 
         assert abs(qcheck - self._overall_quadgrams_frequency_quality) < EPSILON_DELTA_FLOAT
 
@@ -341,6 +453,10 @@ class Attacker:
         assert DECRYPTER is not None
 
         DECRYPTER.swap(cipher1, cipher2)
+
+        #print(f"after swap of {cipher1=} {cipher2=}")
+        #print(DECRYPTER)
+        #print("====")
 
         # effect
 
@@ -365,13 +481,21 @@ class Attacker:
     def _climb(self) -> bool:
         """ climb : try to improve things... """
 
+        assert ALLOCATOR is not None
         assert CIPHER is not None
         assert DECRYPTER is not None
 
-        changes = [(cipher1, cipher2) for cipher1, cipher2 in itertools.combinations(CIPHER.cipher_codes, 2) if DECRYPTER.decode_some(cipher1) != DECRYPTER.decode_some(cipher2)]
-        random.shuffle(changes)
+        # how many attempts before giving up ?
+        number = len(ALLOCATOR.allocated) * (len(ALLOCATOR.allocated) - 1)
+        attempts = int(math.log(EPSILON_PROBA) / math.log((number - 1) / number))
 
-        for cipher1, cipher2 in changes:
+        while True:
+
+            plain1 = random.choice(ALLOCATOR.allocated)
+            plain2 = random.choice(list(set(ALLOCATOR.allocated) - set([plain1])))
+
+            cipher1 = random.choice(list(DECRYPTER.reverse_table[plain1]))
+            cipher2 = random.choice(list(DECRYPTER.reverse_table[plain2]))
 
             # -----------------------
             #  does the change improve things ?
@@ -383,6 +507,13 @@ class Attacker:
             # apply change now
             self._swap(cipher1, cipher2)
 
+            # debug purpose only
+            global N_OPERATIONS
+            N_OPERATIONS += 1
+            #  key = DECRYPTER.as_key()
+            #  plaintext = DECRYPTER.apply()
+            #  print(f"{key=}  -> {plaintext=}")
+
             if DEBUG:
                 self._check_quadgram_frequency_quality()
 
@@ -390,6 +521,10 @@ class Attacker:
             if self._overall_quadgrams_frequency_quality > old_overall_quadgrams_frequency_quality:
                 # yes : stop looping : we have improved
                 return True
+
+            attempts -= 1
+            if attempts == 0:
+                return False
 
             # no improvement so undo
             self._swap(cipher1, cipher2)
@@ -399,8 +534,6 @@ class Attacker:
 
             # restore value
             self._overall_quadgrams_frequency_quality = old_overall_quadgrams_frequency_quality
-
-        return False
 
     def ascend(self) -> None:
         """ ascend : keep climbing until fails to do so """
@@ -430,7 +563,7 @@ def main() -> None:
     parser.add_argument('-s', '--seed', required=False, help='seed random generator to value')
     parser.add_argument('-n', '--ngrams', required=True, help='input a file with frequency table for quadgrams (n-letters)')
     parser.add_argument('-d', '--dictionary', required=True, help='input a file with frequency table for words (dictionary) to use')
-    parser.add_argument('-l', '--limit', required=False, help='limit in number of words loaded from dictionnary')
+    parser.add_argument('-l', '--letters', required=True, help='input a file with frequency table for letters')
     parser.add_argument('-c', '--cipher', required=True, help='cipher to attack')
     parser.add_argument('-D', '--debug', required=False, help='give altitude of cipher taken as plain obtained', action='store_true')
     args = parser.parse_args()
@@ -447,10 +580,14 @@ def main() -> None:
     #  print(NGRAMS)
 
     dictionary_file = args.dictionary
-    limit = int(args.limit) if args.limit is not None else None
     global DICTIONARY
-    DICTIONARY = Dictionary(dictionary_file, limit)
+    DICTIONARY = Dictionary(dictionary_file)
     #  print(DICTIONARY)
+
+    letters_file = args.letters
+    global LETTERS
+    LETTERS = Letters(letters_file)
+    #  print(LETTERS)
 
     debug_mode = args.debug
 
@@ -459,34 +596,57 @@ def main() -> None:
     CIPHER = Cipher(cipher_file, debug_mode)
     print(f"Cipher='{CIPHER}'")
 
+    global ALLOCATOR
+    ALLOCATOR = Allocator()
+    #  print(f"Allocator='{ALLOCATOR}'")
+
     global DECRYPTER
     DECRYPTER = Decrypter()
+    #  print(f"Decrypter='{DECRYPTER}'")
+
+    global ATTACKER
+
+    assert DECRYPTER is not None
 
     if debug_mode:
-        identity = {c: c for c in CIPHER.cipher_codes}
-        DECRYPTER.install(identity)
+
+        # TODO : change situation for debug necessity
+
+        ATTACKER = Attacker()
         plain = DECRYPTER.apply()
         dictionary_quality, selected_words = DICTIONARY.extracted_words(plain)
         print(f"{dictionary_quality=}")
         CIPHER.show_plain(selected_words)
         return
 
+    start_time = time.time()
     best_trigram_quality_sofar: typing.Optional[float] = None
+
+    # outer hill climb
     while True:
 
-        # start a new session
-        global ATTACKER
-        ATTACKER = Attacker()
-        ATTACKER.ascend()
+        # inner hill climb
+        while True:
 
-        # get dictionary quality of result
-        clear = DECRYPTER.apply()
-        dictionary_quality, selected_words = DICTIONARY.extracted_words(clear)
+            # start a new session
+            ATTACKER = Attacker()
+            ATTACKER.ascend()
 
-        if best_trigram_quality_sofar is None or ATTACKER.overall_quadgrams_frequency_quality > best_trigram_quality_sofar:
-            print(f"{dictionary_quality=}")
-            CIPHER.show_plain(selected_words)
-            best_trigram_quality_sofar = ATTACKER.overall_quadgrams_frequency_quality
+            # get dictionary quality of result
+            clear = DECRYPTER.apply()
+            dictionary_quality, selected_words = DICTIONARY.extracted_words(clear)
+
+            if best_trigram_quality_sofar is None or ATTACKER.overall_quadgrams_frequency_quality > best_trigram_quality_sofar:
+                print(f"{dictionary_quality=}")
+                CIPHER.show_plain(selected_words)
+                now = time.time()
+                speed = N_OPERATIONS / (now - start_time)
+                print(f"{speed=}")
+                best_trigram_quality_sofar = ATTACKER.overall_quadgrams_frequency_quality
+
+            # TODO : stop at some point inner hill climb
+
+        # TODO : change ALLOCATOR for outer hill climb
 
 
 if __name__ == '__main__':
