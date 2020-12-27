@@ -306,14 +306,15 @@ class Decrypter:
         return self.decode_some(CIPHER.cipher_str)
 
     def swap(self, cipher1: str, cipher2: str) -> None:
-        """ swap """
+        """ swap : this is the most cosuming function here """
 
         # note the plains
         plain1 = self._table[cipher1]
         plain2 = self._table[cipher2]
 
         # just a little check
-        assert plain1 != plain2
+        # optimized away
+        #  assert plain1 != plain2
 
         # swap
         self._table[cipher1], self._table[cipher2] = self._table[cipher2], self._table[cipher1]
