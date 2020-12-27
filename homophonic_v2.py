@@ -331,7 +331,7 @@ class Decrypter:
 
     def as_key(self) -> str:
         """ as_key """
-        return ''.join([list(self._reverse_table[p])[0] for p in ALPHABET if p in self._reverse_table])
+        return ''.join([list(self._reverse_table[p])[0] if p in self._reverse_table else '-' for p in ALPHABET])
 
     @property
     def reverse_table(self) -> typing.Dict[str, typing.Set[str]]:
