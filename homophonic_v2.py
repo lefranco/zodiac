@@ -37,7 +37,7 @@ MAX_STUFFING = 10
 
 
 class Letters:
-    """ Ngrams : says the frequency of letters """
+    """ Says the frequency of letters """
 
     def __init__(self, filename: str):
 
@@ -55,7 +55,7 @@ class Letters:
         sum_occurences = sum(raw_frequency_table.values())
 
         # for normal values
-        self._freq_table = {q: (raw_frequency_table[q] / sum_occurences) * 100 for q in raw_frequency_table}
+        self._freq_table = {q: raw_frequency_table[q] / sum_occurences for q in raw_frequency_table}
 
     @property
     def freq_table(self) -> typing.Dict[str, float]:
@@ -280,9 +280,12 @@ CIPHER: typing.Optional[Cipher] = None
 class Decrypter:
     """ A decrypter : basically a dictionary cipher -> plain """
 
-    def __init__(self, allocation: typing.Dict[str, str]) -> None:
+    def __init__(self) -> None:
         self._table: typing.Dict[str, str] = dict()
         self._reverse_table: typing.Dict[str, typing.Set[str]] = collections.defaultdict(set)
+
+    def instantiate(self, allocation: typing.Dict[str, str]) -> None:
+        """ instantiate """
         for cipher, plain in allocation.items():
             self._table[cipher] = plain
             self._reverse_table[plain].add(cipher)
@@ -297,7 +300,7 @@ class Decrypter:
         return self.decode_some(CIPHER.cipher_str)
 
     def swap(self, cipher1: str, cipher2: str) -> None:
-        """ swap : this is the most cosuming function here """
+        """ swap : this is the most consuming function here """
 
         # note the plains
         plain1 = self._table[cipher1]
@@ -336,35 +339,36 @@ class Decrypter:
 DECRYPTER: typing.Optional[Decrypter] = None
 
 
-class Allocator:
-    """ An allocator : says how many ciphers could be allocated to every alphabet letter """
+class Bucket:
+    """ A bucket : says how many ciphers could be allocated to every alphabet letter """
 
-    def __init__(self) -> None:
+    def __init__(self, substitution_mode: bool) -> None:
 
         assert CIPHER is not None
-        assert LETTERS is not None
 
-        #  how many different codes
-        number_codes = len(CIPHER.cipher_codes)
+        if substitution_mode:
 
-        if number_codes > len(ALPHABET):
-            print("This is a real homophonic, there are more cipher codes than in the alphabet")
-            print("Sorry, not implemented. YET!")
-            sys.exit(0)
+            self._table = {ll: 1 for ll in ALPHABET}
 
-        sorted_letters = sorted(LETTERS.freq_table, key=lambda l: LETTERS.freq_table[l], reverse=True)  # type: ignore
-        self._table = {ll: 1 for ll in sorted_letters[:number_codes]}
-        self._allocated = list(self._table.keys())
+        else:
+
+            #  how many different codes
+            number_codes = len(CIPHER.cipher_codes)
+            self._table = {ll: 0 for ll in ALPHABET}
+
+            while True:
+
+                # criterion is deficit : how many I should have minus how many I have
+                chosen = max(ALPHABET, key=lambda ll: LETTERS.freq_table[ll] * number_codes - self._table[ll])  # type: ignore
+                self._table[chosen] += 1
+
+                if sum(self._table.values()) == number_codes:
+                    break
 
     def swap(self, letter1: str, letter2: str) -> None:
         """ swap """
         assert letter1 != letter2
         # TODO : swap letters in allocator
-
-    @property
-    def allocated(self) -> typing.List[str]:
-        """ property """
-        return self._allocated
 
     @property
     def table(self) -> typing.Dict[str, int]:
@@ -375,6 +379,45 @@ class Allocator:
         return pprint.pformat(self._table)
 
 
+BUCKET: typing.Optional[Bucket] = None
+
+
+class Allocator:
+    """ Alocator : Makes initial random allocation """
+
+    def __init__(self, substitution_mode: bool) -> None:
+        self._substitution_mode = substitution_mode
+
+    def make_allocation(self) -> typing.Dict[str, str]:
+        """ Makes a random allocation to start with """
+
+        assert CIPHER is not None
+        assert BUCKET is not None
+
+        bucket = copy.copy(BUCKET.table)
+
+        allocation: typing.Dict[str, str] = dict()
+
+        for cipher in CIPHER.cipher_codes:
+            letter_selected = secrets.choice([ll for ll in bucket if bucket[ll]])
+            allocation[cipher] = letter_selected
+            bucket[letter_selected] -= 1
+
+        if self._substitution_mode and len(allocation) < len(ALPHABET):
+            stuffing = sorted(set(ALPHABET) - set(allocation.values()))
+            assert len(stuffing) <= MAX_STUFFING, "Too few different characters in substitution cipher"
+            num = 0
+            while True:
+                letter_selected = secrets.choice(stuffing)
+                stuffing.remove(letter_selected)
+                allocation[f'{num}'] = letter_selected
+                num += 1
+                if not stuffing:
+                    break
+
+        return allocation
+
+
 ALLOCATOR: typing.Optional[Allocator] = None
 N_OPERATIONS = 0
 
@@ -382,40 +425,16 @@ N_OPERATIONS = 0
 class Attacker:
     """ Attacker """
 
-    def __init__(self, substitution_mode: bool) -> None:
+    def __init__(self) -> None:
 
-        assert ALLOCATOR is not None
-        assert CIPHER is not None
         assert NGRAMS is not None
+        assert CIPHER is not None
+        assert DECRYPTER is not None
+        assert BUCKET is not None
+        assert ALLOCATOR is not None
 
-        # make initial random allocation
-        allocation = dict()
-        plains = copy.copy(ALLOCATOR.allocated)
-        for cipher in CIPHER.cipher_codes:
-            plain = secrets.choice(plains)
-            plains.remove(plain)
-            allocation[cipher] = plain
-
-        # complete if allocation has less letters than alphabet
-        if substitution_mode:
-            if len(allocation) < len(ALPHABET):
-                stuffing = sorted(set(ALPHABET) - set(ALLOCATOR.allocated))
-                if len(stuffing) > MAX_STUFFING:
-                    print("Too few different characters in substitution cipher")
-                    print("Sorry, not implemented")
-                    sys.exit(0)
-                num = 0
-                while True:
-                    if not stuffing:
-                        break
-                    plain = secrets.choice(stuffing)
-                    stuffing.remove(plain)
-                    allocation[f'{num}'] = plain
-                    num += 1
-
-        # put it in crypter
-        global DECRYPTER
-        DECRYPTER = Decrypter(allocation)
+        initial_allocation = ALLOCATOR.make_allocation()
+        DECRYPTER.instantiate(initial_allocation)
 
         # a table for remembering frequencies
         self._quadgrams_frequency_quality_table: typing.Dict[str, float] = dict()
@@ -485,7 +504,6 @@ class Attacker:
     def _climb(self) -> bool:
         """ climb : try to improve things... """
 
-        assert ALLOCATOR is not None
         assert CIPHER is not None
         assert DECRYPTER is not None
 
@@ -568,6 +586,11 @@ def main() -> None:
     parser.add_argument('-s', '--substitution_mode', required=False, help='cipher is simple substitution (not homophonic)', action='store_true')
     args = parser.parse_args()
 
+    letters_file = args.letters
+    global LETTERS
+    LETTERS = Letters(letters_file)
+    #  print(LETTERS)
+
     ngrams_file = args.ngrams
     global NGRAMS
     NGRAMS = Ngrams(ngrams_file)
@@ -578,23 +601,25 @@ def main() -> None:
     DICTIONARY = Dictionary(dictionary_file)
     #  print(DICTIONARY)
 
-    letters_file = args.letters
-    global LETTERS
-    LETTERS = Letters(letters_file)
-    #  print(LETTERS)
-
     cipher_file = args.cipher
     global CIPHER
     CIPHER = Cipher(cipher_file)
-    print(f"Cipher='{CIPHER}'")
+    #  print(f"Cipher='{CIPHER}'")
+
+    global DECRYPTER
+    DECRYPTER = Decrypter()
+
+    substitution_mode = args.substitution_mode
+
+    global BUCKET
+    BUCKET = Bucket(substitution_mode)
+    #  print(f"Bucket='{BUCKET}'")
 
     global ALLOCATOR
-    ALLOCATOR = Allocator()
+    ALLOCATOR = Allocator(substitution_mode)
     #  print(f"Allocator='{ALLOCATOR}'")
 
     global ATTACKER
-
-    substitution_mode = args.substitution_mode
 
     start_time = time.time()
     best_trigram_quality_sofar: typing.Optional[float] = None
@@ -606,7 +631,7 @@ def main() -> None:
         while True:
 
             # start a new session
-            ATTACKER = Attacker(substitution_mode)
+            ATTACKER = Attacker()
             ATTACKER.ascend()
 
             # get dictionary quality of result
@@ -627,7 +652,7 @@ def main() -> None:
 
             # TODO : stop at some point inner hill climb
 
-        # TODO : change ALLOCATOR for outer hill climb
+        # TODO : change BUCKET for outer hill climb
 
 
 if __name__ == '__main__':
