@@ -13,12 +13,12 @@ import sys
 import time
 import argparse
 import collections
-import random
 import typing
 import math
 import functools
 import copy
 import pprint
+import secrets  # instead of random
 
 import cProfile
 import pstats
@@ -34,6 +34,7 @@ EPSILON_DELTA_FLOAT = 0.000001  # to compare floats
 EPSILON_PROBA = 1 / 100  # 99% = to make sure we can give up searching
 
 MAX_STUFFING = 10
+
 
 class Letters:
     """ Ngrams : says the frequency of letters """
@@ -224,7 +225,7 @@ class Cipher:
         self._cipher_str = ''.join(self._content)
 
         # the different codes in cipher
-        self._cipher_codes = ''.join(set(self._content))
+        self._cipher_codes = ''.join(sorted(set(self._content)))
 
         # list of cipher quadgrams with duplications
         cipher_quadgrams = [self._cipher_str[p: p + NGRAMS.size] for p in range(len(self._cipher_str) - (NGRAMS.size - 1))]
@@ -400,14 +401,17 @@ class Attacker:
         assert NGRAMS is not None
 
         # make initial random allocation
-        clears_shuffled = copy.copy(ALLOCATOR.allocated)
-        random.shuffle(clears_shuffled)
-        allocation = dict(zip(CIPHER.cipher_codes, clears_shuffled))
+        allocation = dict()
+        clears = copy.copy(ALLOCATOR.allocated)
+        for cipher in CIPHER.cipher_codes:
+            clear = secrets.choice(clears)
+            clears.remove(clear)
+            allocation[cipher] = clear
 
         # complete if allocation has less letters than alphabet
         if substitution_mode:
             if len(allocation) < len(ALPHABET):
-                stuffing = set(ALPHABET) - set(clears_shuffled)
+                stuffing = sorted(set(ALPHABET) - set(ALLOCATOR.allocated))
                 if len(stuffing) > MAX_STUFFING:
                     print("Too few different characters in substitution cipher")
                     print("Sorry, not implemented")
@@ -496,11 +500,11 @@ class Attacker:
 
         while True:
 
-            plain1 = random.choice(ALPHABET)
-            plain2 = random.choice(list(set(ALPHABET) - set([plain1])))
+            plain1 = secrets.choice(ALPHABET)
+            plain2 = secrets.choice(sorted(set(ALPHABET) - set([plain1])))
 
-            cipher1 = random.choice(list(DECRYPTER.reverse_table[plain1]))
-            cipher2 = random.choice(list(DECRYPTER.reverse_table[plain2]))
+            cipher1 = secrets.choice(list(DECRYPTER.reverse_table[plain1]))
+            cipher2 = secrets.choice(list(DECRYPTER.reverse_table[plain2]))
 
             # -----------------------
             #  does the change improve things ?
@@ -565,20 +569,13 @@ def main() -> None:
     """ main """
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('-s', '--seed', required=False, help='seed random generator to value')
     parser.add_argument('-n', '--ngrams', required=True, help='input a file with frequency table for quadgrams (n-letters)')
     parser.add_argument('-d', '--dictionary', required=True, help='input a file with frequency table for words (dictionary) to use')
     parser.add_argument('-l', '--letters', required=True, help='input a file with frequency table for letters')
     parser.add_argument('-c', '--cipher', required=True, help='cipher to attack')
-    parser.add_argument('-S', '--substitution_mode', required=False, help='cipher is simple substitution (not homophonic)', action='store_true')
+    parser.add_argument('-s', '--substitution_mode', required=False, help='cipher is simple substitution (not homophonic)', action='store_true')
     parser.add_argument('-D', '--debug', required=False, help='give debug information and stop', action='store_true')
     args = parser.parse_args()
-
-    #  seed = time.time()
-    seed = args.seed
-    if seed is None:
-        seed = time.time()
-    random.seed(seed)
 
     ngrams_file = args.ngrams
     global NGRAMS
