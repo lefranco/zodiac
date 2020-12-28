@@ -8,54 +8,77 @@ Output : code (file with characters)
 
 import typing
 import argparse
-import random
 import collections
 import unicodedata
-import time
+import pprint
+import secrets  # instead of random
 
 ALPHABET = [chr(i) for i in range(ord('a'), ord('z') + 1)]
 CRYPT_CHARACTERS = [chr(i) for i in range(ord('!'), ord('~') + 1)]
 
 
-def load_frequency_table(filename: str) -> typing.Dict[str, int]:
-    """ load_frequency_table """
+class Letters:
+    """ Ngrams : says the frequency of letters """
 
-    frequency_table: typing.Dict[str, int] = dict()
-    with open(filename) as filepointer:
-        for line in filepointer:
-            line = line.rstrip('\n')
-            letter_read, frequency_str = line.split()
-            letter = letter_read.lower()
-            frequency = int(frequency_str)
-            frequency_table[letter] = frequency
+    def __init__(self, filename: str):
 
-    return frequency_table
+        raw_frequency_table: typing.Dict[str, int] = dict()
+        with open(filename) as filepointer:
+            for line in filepointer:
+                line = line.rstrip('\n')
+                letter_read, letter_str = line.split()
+                letter = letter_read.lower()
+                frequency = int(letter_str)
+                raw_frequency_table[letter] = frequency
+
+        assert len(raw_frequency_table) == len(ALPHABET)
+
+        sum_occurences = sum(raw_frequency_table.values())
+
+        # for normal values
+        self._freq_table = {q: raw_frequency_table[q] / sum_occurences for q in raw_frequency_table}
+
+    @property
+    def freq_table(self) -> typing.Dict[str, float]:
+        """ property """
+        return self._freq_table
+
+    def __str__(self) -> str:
+        """ for debug """
+        return pprint.pformat(self._freq_table)
+
+
+LETTERS: typing.Optional[Letters] = None
 
 
 class Crypter:
     """ A crypter : basically a dictionnary """
 
-    def __init__(self, size: int, fake: bool):
-        total = sum([LETTER_FREQUENCY_TABLE[ll] for ll in ALPHABET])
-        numbers = {ll: max(1, (LETTER_FREQUENCY_TABLE[ll] * size) // total) for ll in ALPHABET}
-        self._table: typing.Dict[str, typing.List[str]] = collections.defaultdict(list)
+    def __init__(self, substitution_mode: bool, number: typing.Optional[int]):
 
-        if fake:
-            for letter in ALPHABET:
-                code = letter
-                self._table[letter].append(code)
+        assert LETTERS is not None
+
+        # how many cipher for a plain
+        if substitution_mode:
+            numbers = {ll: 1 for ll in ALPHABET}
+            pool = set(map(lambda c: c.upper(), ALPHABET))
         else:
+            assert number is not None
+            numbers = {ll: max(1, round(LETTERS.freq_table[ll] * number) - 1 + secrets.choice(range(-1, 2))) for ll in ALPHABET}
             pool = set(CRYPT_CHARACTERS)
-            for letter in ALPHABET:
-                for _ in range(numbers[letter]):
-                    assert pool, "Not so many characters to encode with"
-                    code = random.choice(list(pool))
-                    pool.remove(code)
-                    self._table[letter].append(code)
+            assert len(pool) >= sum(numbers.values()), "Too many ciphers to create"
 
-    def encode(self, char: str) -> str:
+        # encrypting table
+        self._table: typing.Dict[str, typing.List[str]] = collections.defaultdict(list)
+        for letter in ALPHABET:
+            for _ in range(numbers[letter]):
+                code = secrets.choice(list(pool))
+                pool.remove(code)
+                self._table[letter].append(code)
+
+    def encrypt(self, char: str) -> str:
         """ encode """
-        return random.choice(self._table[char])
+        return secrets.choice(self._table[char])
 
     def __str__(self) -> str:
         return '\n'.join([f"{k} : {v}" for k, v in self._table.items()])
@@ -69,6 +92,7 @@ class Cipher:
 
     def __init__(self, filename: str) -> None:
 
+        assert CRYPTER is not None
         self._content: typing.List[str] = list()
 
         with open(filename) as filepointer:
@@ -83,9 +107,8 @@ class Cipher:
                         for letter in word:
                             if letter not in ALPHABET:
                                 continue
-                            assert CRYPTER is not None
-                            code = CRYPTER.encode(letter)
-                            self._content.append(code)
+                            cipĥer = CRYPTER.encrypt(letter)
+                            self._content.append(cipĥer)
 
         self._cipher_str = ''.join(self._content)
 
@@ -93,7 +116,6 @@ class Cipher:
         return self._cipher_str
 
 
-LETTER_FREQUENCY_TABLE: typing.Dict[str, int] = dict()
 CIPHER: typing.Optional[Cipher]
 
 
@@ -101,25 +123,27 @@ def main() -> None:
     """ main """
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('-f', '--frequency', required=True, help='input a file with frequency table for unigrams (letters)')
-    parser.add_argument('-i', '--input', required=True, help='input file with cipher as words')
+    parser.add_argument('-l', '--letters', required=True, help='input a file with frequency table for letters')
+    parser.add_argument('-i', '--input', required=True, help='input file with clear (can have spaces within - will be removed - can have accents - will be corrected)')
+    parser.add_argument('-s', '--substitution_mode', required=False, help='cipher is simple substitution (not homophonic)', action='store_true')
+    parser.add_argument('-n', '--number', required=True, help='number of distinct characters to put in cipher if homophonic')
     parser.add_argument('-o', '--output', required=True, help='output a file with ciphers')
-    parser.add_argument('-n', '--number', required=True, help='number of charactres in code')
     parser.add_argument('-d', '--dump', required=False, help='dump crypter to file')
-    parser.add_argument('-F', '--fake', required=False, help='fake', action='store_true')
     args = parser.parse_args()
 
-    seed = time.time()
-    random.seed(seed)
+    letters_file = args.letters
+    global LETTERS
+    LETTERS = Letters(letters_file)
+    #  print(LETTERS)
 
-    frequency_file = args.frequency
-    global LETTER_FREQUENCY_TABLE
-    LETTER_FREQUENCY_TABLE = load_frequency_table(frequency_file)
+    substitution_mode = args.substitution_mode
+    number = int(args.number)
+
+    if substitution_mode:
+        assert number == len(ALPHABET), f"Number must be {len(ALPHABET)} for substitution_mode cipher"
 
     global CRYPTER
-    number = int(args.number)
-    fake = args.fake
-    CRYPTER = Crypter(number, fake)
+    CRYPTER = Crypter(substitution_mode, number)
     if args.dump:
         crypter_output_file = args.dump
         with open(crypter_output_file, 'w') as file_handle:
@@ -127,6 +151,7 @@ def main() -> None:
 
     cipher_input_file = args.input
     cipher_output_file = args.output
+    substitution_mode = args.substitution_mode
     global CIPHER
     CIPHER = Cipher(cipher_input_file)
     with open(cipher_output_file, 'w') as file_handle:
@@ -134,5 +159,4 @@ def main() -> None:
 
 
 if __name__ == '__main__':
-
     main()
