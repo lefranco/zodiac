@@ -519,9 +519,6 @@ class Attacker:
             # debug purpose only
             global N_OPERATIONS
             N_OPERATIONS += 1
-            #  key = DECRYPTER.as_key()
-            #  plaintext = DECRYPTER.apply()
-            #  print(f"{key=}  -> {plaintext=}")
 
             if DEBUG:
                 self._check_quadgram_frequency_quality()
