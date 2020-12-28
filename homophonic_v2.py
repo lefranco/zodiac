@@ -33,6 +33,7 @@ EPSILON_NO_OCCURENCES = 1e-99  # zero has - infinite as log, must be << 1
 EPSILON_DELTA_FLOAT = 0.000001  # to compare floats
 EPSILON_PROBA = 1 / 1000  # to make sure we can give up searching
 
+MAX_STUFFING = 10
 
 class Letters:
     """ Ngrams : says the frequency of letters """
@@ -357,7 +358,7 @@ class Allocator:
         number_codes = len(CIPHER.cipher_codes)
 
         if number_codes > len(ALPHABET):
-            print("This is a real homophonic, more ciphert codes than the alphabet")
+            print("This is a real homophonic, there are more cipher codes than in the alphabet")
             print("Sorry, not implemented. YET!")
             sys.exit(0)
 
@@ -409,7 +410,8 @@ class Attacker:
                 stuffing = set(ALPHABET) - set(clears_shuffled)
                 if len(stuffing) > MAX_STUFFING:
                     print("Too few different characters in substitution cipher")
-                    exit(0)
+                    print("Sorry, not implemented")
+                    sys.exit(0)
                 for num, plain in enumerate(stuffing):
                     allocation[f'{num}'] = plain
 
@@ -489,13 +491,13 @@ class Attacker:
         assert DECRYPTER is not None
 
         # how many attempts before giving up ?
-        number = len(ALLOCATOR.allocated) * (len(ALLOCATOR.allocated) - 1)
+        number = len(ALPHABET) * (len(ALPHABET) - 1)
         attempts = int(math.log(EPSILON_PROBA) / math.log((number - 1) / number))
 
         while True:
 
-            plain1 = random.choice(ALLOCATOR.allocated)
-            plain2 = random.choice(list(set(ALLOCATOR.allocated) - set([plain1])))
+            plain1 = random.choice(ALPHABET)
+            plain2 = random.choice(list(set(ALPHABET) - set([plain1])))
 
             cipher1 = random.choice(list(DECRYPTER.reverse_table[plain1]))
             cipher2 = random.choice(list(DECRYPTER.reverse_table[plain2]))
