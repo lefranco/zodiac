@@ -203,7 +203,7 @@ DICTIONARY: typing.Optional[Dictionary] = None
 class Cipher:
     """ A cipher : basically a string """
 
-    def __init__(self, filename: str, debug_mode: bool) -> None:
+    def __init__(self, filename: str) -> None:
 
         assert NGRAMS is not None
 
@@ -214,11 +214,6 @@ class Cipher:
                 line = line.rstrip('\n')
                 for word in line.split():
                     for code in word:
-                        if debug_mode:
-                            code = code.lower()
-                            if code not in ALPHABET:
-                                print(f"In debug mode ignored '{code}' from pseudo cipher - not in alphabet")
-                                continue
                         self._content.append(code)
 
         # the cipher as it appears
@@ -285,15 +280,9 @@ CIPHER: typing.Optional[Cipher] = None
 class Decrypter:
     """ A decrypter : basically a dictionary cipher -> plain """
 
-    def __init__(self) -> None:
-        assert CIPHER is not None
-        assert ALLOCATOR is not None
+    def __init__(self, allocation: typing.Dict[str, str]) -> None:
         self._table: typing.Dict[str, str] = dict()
         self._reverse_table: typing.Dict[str, typing.Set[str]] = collections.defaultdict(set)
-
-    def install(self, allocation: typing.Dict[str, str]) -> None:
-        """ install an initial table """
-        assert ALLOCATOR is not None
         for cipher, plain in allocation.items():
             self._table[cipher] = plain
             self._reverse_table[plain].add(cipher)
@@ -397,16 +386,15 @@ class Attacker:
 
         assert ALLOCATOR is not None
         assert CIPHER is not None
-        assert DECRYPTER is not None
         assert NGRAMS is not None
 
         # make initial random allocation
         allocation = dict()
-        clears = copy.copy(ALLOCATOR.allocated)
+        plains = copy.copy(ALLOCATOR.allocated)
         for cipher in CIPHER.cipher_codes:
-            clear = secrets.choice(clears)
-            clears.remove(clear)
-            allocation[cipher] = clear
+            plain = secrets.choice(plains)
+            plains.remove(plain)
+            allocation[cipher] = plain
 
         # complete if allocation has less letters than alphabet
         if substitution_mode:
@@ -416,11 +404,18 @@ class Attacker:
                     print("Too few different characters in substitution cipher")
                     print("Sorry, not implemented")
                     sys.exit(0)
-                for num, plain in enumerate(stuffing):
+                num = 0
+                while True:
+                    if not stuffing:
+                        break
+                    plain = secrets.choice(stuffing)
+                    stuffing.remove(plain)
                     allocation[f'{num}'] = plain
+                    num += 1
 
         # put it in crypter
-        DECRYPTER.install(allocation)
+        global DECRYPTER
+        DECRYPTER = Decrypter(allocation)
 
         # a table for remembering frequencies
         self._quadgrams_frequency_quality_table: typing.Dict[str, float] = dict()
@@ -571,7 +566,6 @@ def main() -> None:
     parser.add_argument('-l', '--letters', required=True, help='input a file with frequency table for letters')
     parser.add_argument('-c', '--cipher', required=True, help='cipher to attack')
     parser.add_argument('-s', '--substitution_mode', required=False, help='cipher is simple substitution (not homophonic)', action='store_true')
-    parser.add_argument('-D', '--debug', required=False, help='give debug information and stop', action='store_true')
     args = parser.parse_args()
 
     ngrams_file = args.ngrams
@@ -589,37 +583,18 @@ def main() -> None:
     LETTERS = Letters(letters_file)
     #  print(LETTERS)
 
-    debug_mode = args.debug
-
     cipher_file = args.cipher
     global CIPHER
-    CIPHER = Cipher(cipher_file, debug_mode)
+    CIPHER = Cipher(cipher_file)
     print(f"Cipher='{CIPHER}'")
 
     global ALLOCATOR
     ALLOCATOR = Allocator()
     #  print(f"Allocator='{ALLOCATOR}'")
 
-    global DECRYPTER
-    DECRYPTER = Decrypter()
-    #  print(f"Decrypter='{DECRYPTER}'")
-
     global ATTACKER
 
     substitution_mode = args.substitution_mode
-
-    assert DECRYPTER is not None
-
-    if debug_mode:
-
-        # TODO : change situation for debug necessity
-
-        ATTACKER = Attacker(substitution_mode)
-        plain = DECRYPTER.apply()
-        dictionary_quality, selected_words = DICTIONARY.extracted_words(plain)
-        print(f"{dictionary_quality=}")
-        CIPHER.show_plain(selected_words)
-        return
 
     start_time = time.time()
     best_trigram_quality_sofar: typing.Optional[float] = None
@@ -635,6 +610,7 @@ def main() -> None:
             ATTACKER.ascend()
 
             # get dictionary quality of result
+            assert DECRYPTER is not None
             clear = DECRYPTER.apply()
             dictionary_quality, selected_words = DICTIONARY.extracted_words(clear)
 
