@@ -31,7 +31,7 @@ RECURSION_LIMIT = 1500  # default is 1000
 ALPHABET = [chr(i) for i in range(ord('a'), ord('z') + 1)]  # plain always lower case
 EPSILON_NO_OCCURENCES = 1e-99  # zero has - infinite as log, must be << 1
 EPSILON_DELTA_FLOAT = 0.000001  # to compare floats
-EPSILON_PROBA = 1 / 1000  # to make sure we can give up searching
+EPSILON_PROBA = 1 / 100  # 99% = to make sure we can give up searching
 
 MAX_STUFFING = 10
 
@@ -455,7 +455,7 @@ class Attacker:
         assert abs(qcheck - self._overall_quadgrams_frequency_quality) < EPSILON_DELTA_FLOAT
 
     def _swap(self, cipher1: str, cipher2: str) -> None:
-        """ swap """
+        """ swap: this is where most CPU time is spent in the program """
 
         assert NGRAMS is not None
         assert CIPHER is not None
