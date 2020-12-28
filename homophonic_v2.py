@@ -286,13 +286,12 @@ class Decrypter:
     def __init__(self) -> None:
         assert CIPHER is not None
         assert ALLOCATOR is not None
-        self._table = {c: '' for c in CIPHER.cipher_codes}
-        self._reverse_table: typing.Dict[str, typing.Set[str]] = {p: set() for p in ALLOCATOR.allocated}
+        self._table: typing.Dict[str, str] = dict()
+        self._reverse_table: typing.Dict[str, typing.Set[str]] = collections.defaultdict(set)
 
     def install(self, allocation: typing.Dict[str, str]) -> None:
         """ install an initial table """
         assert ALLOCATOR is not None
-        self._reverse_table = {p: set() for p in ALLOCATOR.allocated}
         for cipher, plain in allocation.items():
             self._table[cipher] = plain
             self._reverse_table[plain].add(cipher)
@@ -392,7 +391,7 @@ N_OPERATIONS = 0
 class Attacker:
     """ Attacker """
 
-    def __init__(self) -> None:
+    def __init__(self, substitution_mode: bool) -> None:
 
         assert ALLOCATOR is not None
         assert CIPHER is not None
@@ -405,10 +404,14 @@ class Attacker:
         allocation = dict(zip(CIPHER.cipher_codes, clears_shuffled))
 
         # complete if allocation has less letters than alphabet
-        if 0:
+        if substitution_mode:
             if len(allocation) < len(ALPHABET):
-                for num, plain in enumerate(set(ALPHABET) - set(clears_shuffled)):
-                    allocation[f'__{num}__'] = plain
+                stuffing = set(ALPHABET) - set(clears_shuffled)
+                if len(stuffing) > MAX_STUFFING:
+                    print("Too few different characters in substitution cipher")
+                    exit(0)
+                for num, plain in enumerate(stuffing):
+                    allocation[f'{num}'] = plain
 
         # put it in crypter
         DECRYPTER.install(allocation)
@@ -543,7 +546,7 @@ class Attacker:
             # keeps climbing until fails to do so
             succeeded = self._climb()
             if not succeeded:
-                print()
+                print("-", flush=True)
                 return
             print("/", end='', flush=True)
 
@@ -565,7 +568,8 @@ def main() -> None:
     parser.add_argument('-d', '--dictionary', required=True, help='input a file with frequency table for words (dictionary) to use')
     parser.add_argument('-l', '--letters', required=True, help='input a file with frequency table for letters')
     parser.add_argument('-c', '--cipher', required=True, help='cipher to attack')
-    parser.add_argument('-D', '--debug', required=False, help='give altitude of cipher taken as plain obtained', action='store_true')
+    parser.add_argument('-S', '--substitution_mode', required=False, help='cipher is simple substitution (not homophonic)', action='store_true')
+    parser.add_argument('-D', '--debug', required=False, help='give debug information and stop', action='store_true')
     args = parser.parse_args()
 
     #  seed = time.time()
@@ -606,13 +610,15 @@ def main() -> None:
 
     global ATTACKER
 
+    substitution_mode = args.substitution_mode
+
     assert DECRYPTER is not None
 
     if debug_mode:
 
         # TODO : change situation for debug necessity
 
-        ATTACKER = Attacker()
+        ATTACKER = Attacker(substitution_mode)
         plain = DECRYPTER.apply()
         dictionary_quality, selected_words = DICTIONARY.extracted_words(plain)
         print(f"{dictionary_quality=}")
@@ -629,7 +635,7 @@ def main() -> None:
         while True:
 
             # start a new session
-            ATTACKER = Attacker()
+            ATTACKER = Attacker(substitution_mode)
             ATTACKER.ascend()
 
             # get dictionary quality of result
