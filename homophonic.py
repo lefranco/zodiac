@@ -132,7 +132,7 @@ NGRAMS: typing.Optional[Ngrams] = None
 class Dictionary:
     """ Stores the list of word. Say how many words in tempted plain """
 
-    def __init__(self, filename: str) -> None:
+    def __init__(self, filename: str, limit: typing.Optional[int]) -> None:
 
         before = time.time()
 
@@ -155,6 +155,10 @@ class Dictionary:
                 frequency = int(frequency_str)
                 raw_frequency_table[word] = frequency
                 line_num += 1
+
+                if limit is not None and len(raw_frequency_table) >= limit:
+                    print(f"Ignoring dictionary words after the {limit}th")
+                    break
 
         # pass two : enter data
         sum_occurences = sum(raw_frequency_table.values())
@@ -589,6 +593,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument('-n', '--ngrams', required=True, help='input a file with frequency table for quadgrams (n-letters)')
     parser.add_argument('-d', '--dictionary', required=True, help='input a file with frequency table for words (dictionary) to use')
+    parser.add_argument('-L', '--limit', required=False, help='limit for the dictionary words to use')
     parser.add_argument('-l', '--letters', required=True, help='input a file with frequency table for letters')
     parser.add_argument('-c', '--cipher', required=True, help='cipher to attack')
     parser.add_argument('-s', '--substitution_mode', required=False, help='cipher is simple substitution (not homophonic)', action='store_true')
@@ -605,8 +610,9 @@ def main() -> None:
     #  print(NGRAMS)
 
     dictionary_file = args.dictionary
+    limit = int(args.limit)
     global DICTIONARY
-    DICTIONARY = Dictionary(dictionary_file)
+    DICTIONARY = Dictionary(dictionary_file, limit)
     #  print(DICTIONARY)
 
     substitution_mode = args.substitution_mode
