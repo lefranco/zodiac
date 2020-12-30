@@ -297,6 +297,7 @@ class Decrypter:
 
     def instantiate(self, allocation: typing.Dict[str, str]) -> None:
         """ instantiate """
+        self._reverse_table: typing.Dict[str, typing.Set[str]] = collections.defaultdict(set)
         for cipher, plain in allocation.items():
             self._table[cipher] = plain
             self._reverse_table[plain].add(cipher)
@@ -334,10 +335,22 @@ class Decrypter:
         self._reverse_table[plain2].remove(cipher2)
         self._reverse_table[plain1].add(cipher2)
 
-    def as_key(self) -> str:
-        """ as_key """
-        # TODO : print properly a homophonic key
-        return ''.join([list(self._reverse_table[p])[0] if p in self._reverse_table else '-' for p in ALPHABET])
+    def print_key(self) -> None:
+        """ print_key """
+
+        print("-" * len(ALPHABET))
+        print(''.join(ALPHABET))
+        most_affected = max([len(s) for s in self._reverse_table.values()])
+        for rank in range(most_affected):
+            for letter in ALPHABET:
+                ciphers = sorted(self._reverse_table[letter])
+                if rank < len(ciphers):
+                    cipher = ciphers[rank]
+                    print(cipher, end='')
+                else:
+                    print(' ', end='')
+            print()
+        print("-" * len(ALPHABET))
 
     @property
     def reverse_table(self) -> typing.Dict[str, typing.Set[str]]:
@@ -659,9 +672,9 @@ def main() -> None:
                 now = time.time()
                 speed = N_OPERATIONS / (now - start_time)
                 print(f"{speed=}")
-                key = DECRYPTER.as_key().upper()
                 score = ATTACKER.overall_quadgrams_frequency_quality
-                print(f"{key=} {score=}")
+                print(f"{score=}")
+                DECRYPTER.print_key()
                 best_trigram_quality_sofar = ATTACKER.overall_quadgrams_frequency_quality
 
             # TODO : stop at some point inner hill climb
