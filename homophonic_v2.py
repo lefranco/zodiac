@@ -29,7 +29,8 @@ DEBUG = False
 RECURSION_LIMIT = 1500  # default is 1000
 
 ALPHABET = [chr(i) for i in range(ord('a'), ord('z') + 1)]  # plain always lower case
-EPSILON_NO_OCCURENCES = 1e-99  # zero has - infinite as log, must be << 1
+EPSILON_NO_OCCURENCES_DICTIONARY = 1e-99  # zero has - infinite as log, must be << 1
+EPSILON_NO_OCCURENCES_NGRAM = 0.01  # zero has - infinite as log, must be << 1
 EPSILON_DELTA_FLOAT = 0.000001  # to compare floats
 EPSILON_PROBA = 1 / 100  # 99% = to make sure we can give up searching
 
@@ -99,7 +100,7 @@ class Ngrams:
         # for normal values
         self._log_freq_table = {q: math.log10(raw_frequency_table[q] / sum_occurences) for q in raw_frequency_table}
 
-        self._worst_frequency = math.log10(EPSILON_NO_OCCURENCES / sum_occurences)
+        self._worst_frequency = math.log10(EPSILON_NO_OCCURENCES_NGRAM / sum_occurences)
 
         after = time.time()
         elapsed = after - before
@@ -158,10 +159,10 @@ class Dictionary:
         # pass two : enter data
         sum_occurences = sum(raw_frequency_table.values())
         self._log_frequency_table = {w: math.log10(raw_frequency_table[w] / sum_occurences) for w in raw_frequency_table}
-        self._worst_frequency = math.log10(EPSILON_NO_OCCURENCES / sum_occurences)
+        self._worst_frequency = math.log10(EPSILON_NO_OCCURENCES_DICTIONARY / sum_occurences)
 
         # longest word
-        self._longest_word = max([len(w) for w in self._log_frequency_table])
+        self._longest_word_size = max([len(w) for w in self._log_frequency_table])
 
         after = time.time()
         elapsed = after - before
@@ -177,7 +178,7 @@ class Dictionary:
         @functools.lru_cache(maxsize=None)
         def splits(text: str) -> typing.List[typing.Tuple[str, str]]:
             """ All ways to split some text into a first word and remainder """
-            return [(text[:cut + 1], text[cut + 1:]) for cut in range(min(self._longest_word, len(text)))]
+            return [(text[:cut + 1], text[cut + 1:]) for cut in range(min(self._longest_word_size, len(text)))]
 
         @functools.lru_cache(maxsize=None)
         def segment_rec(text: str) -> typing.List[str]:
@@ -203,7 +204,7 @@ DICTIONARY: typing.Optional[Dictionary] = None
 class Cipher:
     """ A cipher : basically a string """
 
-    def __init__(self, filename: str) -> None:
+    def __init__(self, filename: str, substitution_mode: bool) -> None:
 
         assert NGRAMS is not None
 
@@ -214,6 +215,12 @@ class Cipher:
                 line = line.rstrip('\n')
                 for word in line.split():
                     for code in word:
+
+                        # substituion mode : check in alphabet, store as upper case
+                        if substitution_mode:
+                            assert code.lower() in ALPHABET
+                            code = code.upper()
+
                         self._content.append(code)
 
         # the cipher as it appears
@@ -325,6 +332,7 @@ class Decrypter:
 
     def as_key(self) -> str:
         """ as_key """
+        # TODO : print properly a homophonic key
         return ''.join([list(self._reverse_table[p])[0] if p in self._reverse_table else '-' for p in ALPHABET])
 
     @property
@@ -348,13 +356,13 @@ class Bucket:
 
         if substitution_mode:
 
-            self._table = {ll: 1 for ll in ALPHABET}
+            self._table = {ll: 1 for ll in sorted(ALPHABET, key=lambda ll: LETTERS.freq_table[ll], reverse=True)}  # type: ignore
 
         else:
 
             #  how many different codes
             number_codes = len(CIPHER.cipher_codes)
-            self._table = {ll: 0 for ll in ALPHABET}
+            self._table = {ll: 0 for ll in sorted(ALPHABET, key=lambda ll: LETTERS.freq_table[ll], reverse=True)}  # type: ignore
 
             while True:
 
@@ -601,15 +609,15 @@ def main() -> None:
     DICTIONARY = Dictionary(dictionary_file)
     #  print(DICTIONARY)
 
+    substitution_mode = args.substitution_mode
+
     cipher_file = args.cipher
     global CIPHER
-    CIPHER = Cipher(cipher_file)
+    CIPHER = Cipher(cipher_file, substitution_mode)
     #  print(f"Cipher='{CIPHER}'")
 
     global DECRYPTER
     DECRYPTER = Decrypter()
-
-    substitution_mode = args.substitution_mode
 
     global BUCKET
     BUCKET = Bucket(substitution_mode)
