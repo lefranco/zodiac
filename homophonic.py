@@ -25,6 +25,7 @@ import pstats
 
 PROFILE = False
 DEBUG = False
+TEST = True
 
 RECURSION_LIMIT = 1500  # default is 1000
 
@@ -35,7 +36,7 @@ EPSILON_DELTA_FLOAT = 0.000001  # to compare floats
 EPSILON_PROBA = 1 / 10  # 90% = to make sure we can give up searching
 
 MAX_STUFFING = 10
-MAX_CLIMBS = 26
+MAX_CLIMBS = 1000 if TEST else 26
 MAX_BUCKET_CHANGE_ATTEMPTS = 5
 
 
@@ -314,7 +315,7 @@ class Decrypter:
 
         # just a little check
         # optimized away
-        #  assert plain1 != plain2
+        assert plain1 != plain2
 
         # swap
         self._table[cipher1], self._table[cipher2] = self._table[cipher2], self._table[cipher1]
@@ -388,8 +389,21 @@ class Bucket:
                 if sum(self._table.values()) == number_codes:
                     break
 
+        # DEBUG TODO REMOVE
+        if TEST:
+            for l in self._table:
+                self._table[l] = 1
+            for l in ['j','q','z']:
+                self._table[l] = 0
+            for l in ['r', 's']:
+                self._table[l] = 2
+            for l in ['e']:
+                self._table[l] = 3
+
     def fake_swap(self, decremented: str, incremented: str) -> None:
         """ swap letters in allocator """
+
+        assert not TEST
 
         assert incremented != decremented
         assert self._table[decremented]
@@ -420,14 +434,16 @@ class Allocator:
         assert CIPHER is not None
         assert BUCKET is not None
 
-        bucket = copy.copy(BUCKET.table)
+        bucket_copy = copy.copy(BUCKET.table)
 
         allocation: typing.Dict[str, str] = dict()
 
         for cipher in CIPHER.cipher_codes:
-            letter_selected = secrets.choice([ll for ll in bucket if bucket[ll]])
+            letter_selected = secrets.choice([ll for ll in bucket_copy if bucket_copy[ll]])
             allocation[cipher] = letter_selected
-            bucket[letter_selected] -= 1
+            bucket_copy[letter_selected] -= 1
+
+        assert all([bucket_copy[ll] == 0 for ll in bucket_copy])
 
         if self._substitution_mode and len(allocation) < len(ALPHABET):
             stuffing = sorted(set(ALPHABET) - set(allocation.values()))
@@ -461,6 +477,8 @@ class Attacker:
 
         initial_allocation = ALLOCATOR.make_allocation()
         DECRYPTER.instantiate(initial_allocation)
+        print(f"{initial_allocation=}")
+        DECRYPTER.print_key()
 
         # a table for remembering frequencies
         self._quadgrams_frequency_quality_table: typing.Dict[str, float] = dict()
@@ -506,6 +524,7 @@ class Attacker:
         assert DECRYPTER is not None
 
         DECRYPTER.swap(cipher1, cipher2)
+        DECRYPTER.print_key()
 
         # effect
 
@@ -539,6 +558,7 @@ class Attacker:
 
         while True:
 
+            # TODO : solve empty sequence here
             plain1 = secrets.choice(DECRYPTER.allocated())
             plain2 = secrets.choice(sorted(set(DECRYPTER.allocated()) - set([plain1])))
 

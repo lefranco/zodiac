@@ -81,7 +81,9 @@ class Crypter:
         return secrets.choice(self._table[char])
 
     def __str__(self) -> str:
-        return '\n'.join([f"{k} : {v}" for k, v in self._table.items()])
+        def encoded(plain):
+            return self._table[plain] if plain in CIPHER.clear_content else '-'
+        return '\n'.join([f"{plain} : {encoded(plain)}" for plain in ALPHABET])
 
 
 CRYPTER: typing.Optional[Crypter]
@@ -94,6 +96,7 @@ class Cipher:
 
         assert CRYPTER is not None
         self._content: typing.List[str] = list()
+        self._clear_content: typing.List[str] = list()
 
         with open(filename) as filepointer:
             for line in filepointer:
@@ -107,10 +110,16 @@ class Cipher:
                         for letter in word:
                             if letter not in ALPHABET:
                                 continue
+                            self._clear_content.append(letter)
                             code = CRYPTER.encrypt(letter)
                             self._content.append(code)
 
         self._cipher_str = ''.join(self._content)
+
+    @property
+    def clear_content(self) -> str:
+        """ property """
+        return self._clear_content
 
     def __str__(self) -> str:
         return self._cipher_str
@@ -144,10 +153,6 @@ def main() -> None:
 
     global CRYPTER
     CRYPTER = Crypter(substitution_mode, number)
-    if args.dump:
-        crypter_output_file = args.dump
-        with open(crypter_output_file, 'w') as file_handle:
-            print(CRYPTER, file=file_handle)
 
     cipher_input_file = args.input
     cipher_output_file = args.output
@@ -157,6 +162,11 @@ def main() -> None:
     with open(cipher_output_file, 'w') as file_handle:
         print(CIPHER, file=file_handle)
 
+    if args.dump:
+        crypter_output_file = args.dump
+        # will not print characters absent from cipher
+        with open(crypter_output_file, 'w') as file_handle:
+            print(CRYPTER, file=file_handle)
 
 if __name__ == '__main__':
     main()
