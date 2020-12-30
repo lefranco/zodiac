@@ -297,7 +297,7 @@ class Decrypter:
 
     def instantiate(self, allocation: typing.Dict[str, str]) -> None:
         """ instantiate """
-        self._reverse_table: typing.Dict[str, typing.Set[str]] = collections.defaultdict(set)
+        self._reverse_table.clear()
         for cipher, plain in allocation.items():
             self._table[cipher] = plain
             self._reverse_table[plain].add(cipher)
@@ -334,6 +334,10 @@ class Decrypter:
         # cipĥer2
         self._reverse_table[plain2].remove(cipher2)
         self._reverse_table[plain1].add(cipher2)
+
+    def allocated(self) -> typing.List[str]:
+        """ allocated """
+        return list(self._reverse_table.keys())
 
     def print_key(self) -> None:
         """ print_key """
@@ -533,13 +537,13 @@ class Attacker:
         assert DECRYPTER is not None
 
         # how many attempts before giving up ?
-        number = len(ALPHABET) * (len(ALPHABET) - 1)
+        number = len(DECRYPTER.allocated()) * (len(DECRYPTER.allocated()) - 1)
         attempts = int(math.log(EPSILON_PROBA) / math.log((number - 1) / number))
 
         while True:
 
-            plain1 = secrets.choice(ALPHABET)
-            plain2 = secrets.choice(sorted(set(ALPHABET) - set([plain1])))
+            plain1 = secrets.choice(DECRYPTER.allocated())
+            plain2 = secrets.choice(sorted(set(DECRYPTER.allocated()) - set([plain1])))
 
             cipher1 = secrets.choice(list(DECRYPTER.reverse_table[plain1]))
             cipher2 = secrets.choice(list(DECRYPTER.reverse_table[plain2]))
