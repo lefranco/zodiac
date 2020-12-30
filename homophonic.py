@@ -32,9 +32,11 @@ ALPHABET = [chr(i) for i in range(ord('a'), ord('z') + 1)]  # plain always lower
 EPSILON_NO_OCCURENCES_DICTIONARY = 1e-99  # zero has - infinite as log, must be << 1
 EPSILON_NO_OCCURENCES_NGRAM = 0.01  # zero has - infinite as log, must be << 1
 EPSILON_DELTA_FLOAT = 0.000001  # to compare floats
-EPSILON_PROBA = 1 / 100  # 99% = to make sure we can give up searching
+EPSILON_PROBA = 1 / 10  # 90% = to make sure we can give up searching
 
 MAX_STUFFING = 10
+MAX_CLIMBS = 26
+MAX_BUCKET_CHANGE_ATTEMPTS = 5
 
 
 class Letters:
@@ -93,7 +95,7 @@ class Ngrams:
                 raw_frequency_table[quadgram] = frequency
 
         coverage = (len(raw_frequency_table) / (len(ALPHABET) ** self._size)) * 100
-        print(f"Frequency tables covers {coverage:.2f}% of possibilities")
+        print(f"INFORMATION: Frequency tables covers {coverage:.2f}% of possibilities")
 
         sum_occurences = sum(raw_frequency_table.values())
 
@@ -104,7 +106,7 @@ class Ngrams:
 
         after = time.time()
         elapsed = after - before
-        print(f"N-Gram frequency file '{filename}' loaded in {elapsed:2.2f} seconds")
+        print(f"INFORMATION: N-Gram frequency file '{filename}' loaded in {elapsed:2.2f} seconds")
 
     @property
     def size(self) -> int:
@@ -157,7 +159,7 @@ class Dictionary:
                 line_num += 1
 
                 if limit is not None and len(raw_frequency_table) >= limit:
-                    print(f"Ignoring dictionary words after the {limit}th")
+                    print(f"INFORMATION: Ignoring dictionary words after the {limit}th")
                     break
 
         # pass two : enter data
@@ -170,7 +172,7 @@ class Dictionary:
 
         after = time.time()
         elapsed = after - before
-        print(f"Word list file '{filename}' loaded in {elapsed:2.2f} seconds")
+        print(f"INFORMATION: Dictionnary (word list) file '{filename}' loaded in {elapsed:2.2f} seconds")
 
     def extracted_words(self, plain: str) -> typing.Tuple[float, typing.List[str]]:
         """ Tells the  of (more or less) plain text from the dictionary  """
@@ -247,14 +249,6 @@ class Cipher:
         for quadgram in self._quadgrams_set:
             for code in quadgram:
                 self._quadgrams_localization_table[code].append(quadgram)
-
-    def show_plain(self, selected_words: typing.List[str]) -> None:
-        """ need to be here because this objects know jow many characters are missing """
-        cipher_length = len(self._cipher_str)
-        plain_length = sum(map(len, selected_words))
-        coverage = plain_length / cipher_length * 100
-        print(f"Covers {coverage:.2f}%")
-        print(' '.join(selected_words))
 
     @property
     def cipher_codes(self) -> str:
@@ -394,10 +388,13 @@ class Bucket:
                 if sum(self._table.values()) == number_codes:
                     break
 
-    def swap(self, letter1: str, letter2: str) -> None:
-        """ swap """
-        assert letter1 != letter2
-        # TODO : swap letters in allocator
+    def fake_swap(self, decremented: str, incremented: str) -> None:
+        """ swap letters in allocator """
+
+        assert incremented != decremented
+        assert self._table[decremented]
+        self._table[decremented] -= 1
+        self._table[incremented] += 1
 
     @property
     def table(self) -> typing.Dict[str, int]:
@@ -644,7 +641,7 @@ def main() -> None:
 
     global BUCKET
     BUCKET = Bucket(substitution_mode)
-    #  print(f"Bucket='{BUCKET}'")
+    print(f"Initial Bucket='{BUCKET}'")
 
     global ALLOCATOR
     ALLOCATOR = Allocator(substitution_mode)
@@ -655,10 +652,14 @@ def main() -> None:
     start_time = time.time()
     best_trigram_quality_sofar: typing.Optional[float] = None
 
+    # set of buckets tried to avoid repeat
+    bucket_tried: typing.Set[typing.Tuple[int, ...]] = set()
+
     # outer hill climb
     while True:
 
         # inner hill climb
+        number_climbs = 0
         while True:
 
             # start a new session
@@ -671,8 +672,8 @@ def main() -> None:
             dictionary_quality, selected_words = DICTIONARY.extracted_words(clear)
 
             if best_trigram_quality_sofar is None or ATTACKER.overall_quadgrams_frequency_quality > best_trigram_quality_sofar:
+                print(' '.join(selected_words))
                 print(f"{dictionary_quality=}")
-                CIPHER.show_plain(selected_words)
                 now = time.time()
                 speed = N_OPERATIONS / (now - start_time)
                 print(f"{speed=}")
@@ -680,10 +681,37 @@ def main() -> None:
                 print(f"{score=}")
                 DECRYPTER.print_key()
                 best_trigram_quality_sofar = ATTACKER.overall_quadgrams_frequency_quality
+                number_climbs = 0
 
-            # TODO : stop at some point inner hill climb
+            # stop at some point inner hill climb
+            number_climbs += 1
+            if number_climbs == MAX_CLIMBS:
+                break
 
-        # TODO : change BUCKET for outer hill climb
+        # changing BUCKET for outer hill climb
+
+        # remember this bucket
+        bucket_capture = tuple(BUCKET.table.values())
+        bucket_tried.add(bucket_capture)
+
+        # find a change
+        bucket_change_attempts = MAX_BUCKET_CHANGE_ATTEMPTS
+        while True:
+            decremented = secrets.choice([ll for ll in BUCKET.table if BUCKET.table[ll]])
+            incremented = secrets.choice(list(set(BUCKET.table) - set([decremented])))
+            BUCKET.fake_swap(decremented, incremented)
+            new_bucket_capture = tuple(BUCKET.table.values())
+            if new_bucket_capture not in bucket_tried:
+                break
+
+            bucket_change_attempts -= 1
+            assert bucket_change_attempts, "Internal error : cannot change bucket"
+
+            # reverse
+            BUCKET.fake_swap(incremented, decremented)  # pylint: disable=arguments-out-of-order
+
+        # show
+        print(f"New Bucket='{BUCKET}'")
 
 
 if __name__ == '__main__':
