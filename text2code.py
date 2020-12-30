@@ -107,8 +107,8 @@ class Cipher:
                         for letter in word:
                             if letter not in ALPHABET:
                                 continue
-                            cipĥer = CRYPTER.encrypt(letter)
-                            self._content.append(cipĥer)
+                            code = CRYPTER.encrypt(letter)
+                            self._content.append(code)
 
         self._cipher_str = ''.join(self._content)
 
