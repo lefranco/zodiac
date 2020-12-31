@@ -38,8 +38,6 @@ MAX_STUFFING = 10
 MAX_CLIMBS = 100
 MAX_BUCKET_CHANGE_ATTEMPTS = 5
 
-TEST = True
-
 
 class Letters:
     """ Says the frequency of letters """
@@ -393,17 +391,6 @@ class Bucket:
                 if sum(self._table.values()) == number_codes:
                     break
 
-        # DEBUG TODO REMOVE
-        if TEST:
-            for letter in self._table:
-                self._table[letter] = 1
-            for letter in ['j', 'q', 'z']:
-                self._table[letter] = 0
-            for letter in ['r', 's']:
-                self._table[letter] = 2
-            for letter in ['e']:
-                self._table[letter] = 3
-
     def fake_swap(self, decremented: str, incremented: str) -> None:
         """ swap letters in allocator """
 
@@ -673,10 +660,13 @@ def main() -> None:
     # set of buckets tried to avoid repeat
     bucket_tried: typing.Set[typing.Tuple[int, ...]] = set()
 
+    new_attempt = False
+
     # outer hill climb
     while True:
 
         # inner hill climb
+        improved = False
         number_climbs = 0
         while True:
 
@@ -699,6 +689,7 @@ def main() -> None:
                 print(f"{score=}")
                 DECRYPTER.print_key()
                 best_trigram_quality_sofar = ATTACKER.overall_quadgrams_frequency_quality
+                improved = True
                 number_climbs = 0
 
             # stop at some point inner hill climb
@@ -712,24 +703,36 @@ def main() -> None:
         bucket_capture = tuple(BUCKET.table.values())
         bucket_tried.add(bucket_capture)
 
+        if new_attempt and not improved:
+            # reverse
+            BUCKET.fake_swap(incremented, decremented)  # pylint: disable=arguments-out-of-order
+
         # find a change
         bucket_change_attempts = MAX_BUCKET_CHANGE_ATTEMPTS
         while True:
+
+            # find two  letter
             decremented = secrets.choice([ll for ll in BUCKET.table if BUCKET.table[ll]])
             incremented = secrets.choice(list(set(BUCKET.table) - set([decremented])))
+
+            # is it new ?
             BUCKET.fake_swap(decremented, incremented)
             new_bucket_capture = tuple(BUCKET.table.values())
             if new_bucket_capture not in bucket_tried:
                 break
 
+            # need a check
             bucket_change_attempts -= 1
             assert bucket_change_attempts, "Internal error : cannot change bucket"
 
-            # reverse
+            # undo
             BUCKET.fake_swap(incremented, decremented)  # pylint: disable=arguments-out-of-order
 
         # show
+        print("=============================================")
+        print(f"{decremented=} {incremented=}")
         print(f"New Bucket='{BUCKET}'")
+        new_attempt = True
 
 
 if __name__ == '__main__':
