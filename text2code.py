@@ -169,5 +169,6 @@ def main() -> None:
         with open(crypter_output_file, 'w') as file_handle:
             print(CRYPTER, file=file_handle)
 
+
 if __name__ == '__main__':
     main()

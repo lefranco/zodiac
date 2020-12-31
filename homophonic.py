@@ -25,7 +25,6 @@ import pstats
 
 PROFILE = False
 DEBUG = False
-TEST = True
 
 RECURSION_LIMIT = 1500  # default is 1000
 
@@ -36,8 +35,10 @@ EPSILON_DELTA_FLOAT = 0.000001  # to compare floats
 EPSILON_PROBA = 1 / 10  # 90% = to make sure we can give up searching
 
 MAX_STUFFING = 10
-MAX_CLIMBS = 1000 if TEST else 26
+MAX_CLIMBS = 100
 MAX_BUCKET_CHANGE_ATTEMPTS = 5
+
+TEST = True
 
 
 class Letters:
@@ -289,6 +290,7 @@ class Decrypter:
     def __init__(self) -> None:
         self._table: typing.Dict[str, str] = dict()
         self._reverse_table: typing.Dict[str, typing.Set[str]] = collections.defaultdict(set)
+        self._allocated: typing.Set[str] = set()
 
     def instantiate(self, allocation: typing.Dict[str, str]) -> None:
         """ instantiate """
@@ -296,6 +298,7 @@ class Decrypter:
         for cipher, plain in allocation.items():
             self._table[cipher] = plain
             self._reverse_table[plain].add(cipher)
+        self._allocated = set(allocation.values())
 
     def decode_some(self, cipher_part: str) -> str:
         """ decode """
@@ -330,10 +333,6 @@ class Decrypter:
         self._reverse_table[plain2].remove(cipher2)
         self._reverse_table[plain1].add(cipher2)
 
-    def allocated(self) -> typing.List[str]:
-        """ allocated """
-        return list(self._reverse_table.keys())
-
     def print_key(self) -> None:
         """ print_key """
 
@@ -350,6 +349,11 @@ class Decrypter:
                     print(' ', end='')
             print()
         print("-" * len(ALPHABET))
+
+    @property
+    def allocated(self) -> typing.Set[str]:
+        """ property """
+        return self._allocated
 
     @property
     def reverse_table(self) -> typing.Dict[str, typing.Set[str]]:
@@ -391,19 +395,17 @@ class Bucket:
 
         # DEBUG TODO REMOVE
         if TEST:
-            for l in self._table:
-                self._table[l] = 1
-            for l in ['j','q','z']:
-                self._table[l] = 0
-            for l in ['r', 's']:
-                self._table[l] = 2
-            for l in ['e']:
-                self._table[l] = 3
+            for letter in self._table:
+                self._table[letter] = 1
+            for letter in ['j', 'q', 'z']:
+                self._table[letter] = 0
+            for letter in ['r', 's']:
+                self._table[letter] = 2
+            for letter in ['e']:
+                self._table[letter] = 3
 
     def fake_swap(self, decremented: str, incremented: str) -> None:
         """ swap letters in allocator """
-
-        assert not TEST
 
         assert incremented != decremented
         assert self._table[decremented]
@@ -416,7 +418,7 @@ class Bucket:
         return self._table
 
     def __str__(self) -> str:
-        return pprint.pformat(self._table)
+        return str(self._table)
 
 
 BUCKET: typing.Optional[Bucket] = None
@@ -477,8 +479,6 @@ class Attacker:
 
         initial_allocation = ALLOCATOR.make_allocation()
         DECRYPTER.instantiate(initial_allocation)
-        print(f"{initial_allocation=}")
-        DECRYPTER.print_key()
 
         # a table for remembering frequencies
         self._quadgrams_frequency_quality_table: typing.Dict[str, float] = dict()
@@ -524,7 +524,6 @@ class Attacker:
         assert DECRYPTER is not None
 
         DECRYPTER.swap(cipher1, cipher2)
-        DECRYPTER.print_key()
 
         # effect
 
@@ -553,14 +552,13 @@ class Attacker:
         assert DECRYPTER is not None
 
         # how many attempts before giving up ?
-        number = len(DECRYPTER.allocated()) * (len(DECRYPTER.allocated()) - 1)
+        number = len(DECRYPTER.allocated) * (len(DECRYPTER.allocated) - 1)
         attempts = int(math.log(EPSILON_PROBA) / math.log((number - 1) / number))
 
         while True:
 
-            # TODO : solve empty sequence here
-            plain1 = secrets.choice(DECRYPTER.allocated())
-            plain2 = secrets.choice(sorted(set(DECRYPTER.allocated()) - set([plain1])))
+            plain1 = secrets.choice(list(DECRYPTER.allocated))
+            plain2 = secrets.choice(sorted(set(DECRYPTER.allocated) - set([plain1])))
 
             cipher1 = secrets.choice(list(DECRYPTER.reverse_table[plain1]))
             cipher2 = secrets.choice(list(DECRYPTER.reverse_table[plain2]))
