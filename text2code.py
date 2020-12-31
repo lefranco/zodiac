@@ -81,8 +81,9 @@ class Crypter:
         return secrets.choice(self._table[char])
 
     def __str__(self) -> str:
-        def encoded(plain):
-            return self._table[plain] if plain in CIPHER.clear_content else '-'
+        def encoded(plain: str) -> typing.List[str]:
+            assert CIPHER is not None
+            return self._table[plain] if plain in CIPHER.clear_content else ['-']
         return '\n'.join([f"{plain} : {encoded(plain)}" for plain in ALPHABET])
 
 
@@ -117,7 +118,7 @@ class Cipher:
         self._cipher_str = ''.join(self._content)
 
     @property
-    def clear_content(self) -> str:
+    def clear_content(self) -> typing.List[str]:
         """ property """
         return self._clear_content
 
