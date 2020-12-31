@@ -172,7 +172,7 @@ class Dictionary:
 
         after = time.time()
         elapsed = after - before
-        print(f"INFORMATION: Dictionnary (word list) file '{filename}' loaded in {elapsed:2.2f} seconds")
+        print(f"INFORMATION: Dictionary (word list) file '{filename}' loaded in {elapsed:2.2f} seconds")
 
     def extracted_words(self, plain: str) -> typing.Tuple[float, typing.List[str]]:
         """ Tells the  of (more or less) plain text from the dictionary  """
