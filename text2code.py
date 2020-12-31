@@ -83,7 +83,7 @@ class Crypter:
     def __str__(self) -> str:
         def encoded(plain: str) -> typing.List[str]:
             assert CIPHER is not None
-            return self._table[plain] if plain in CIPHER.clear_content else ['-']
+            return ' '.join(self._table[plain]) if plain in CIPHER.clear_content else ''
         return '\n'.join([f"{plain} : {encoded(plain)}" for plain in ALPHABET])
 
 

@@ -35,7 +35,7 @@ EPSILON_DELTA_FLOAT = 0.000001  # to compare floats
 EPSILON_PROBA = 1 / 10  # 90% = to make sure we can give up searching
 
 MAX_STUFFING = 10
-MAX_CLIMBS = 100
+MAX_CLIMBS = 50
 MAX_BUCKET_CHANGE_ATTEMPTS = 5
 
 
