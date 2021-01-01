@@ -1,0 +1,26 @@
+a : y ~
+b : T
+c : I
+d : |
+e : o h E
+f : m
+g : `
+h : > A
+i : t
+j : 
+k : :
+l : 2
+m : F
+n : P
+o : < 8 %
+p : r
+q : 
+r : K O
+s : _ c
+t : p ? S !
+u : e
+v : '
+w : k
+x : f
+y : /
+z : 
