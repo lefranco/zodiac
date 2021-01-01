@@ -436,8 +436,6 @@ class Allocator:
             allocation[cipher] = letter_selected
             bucket_copy[letter_selected] -= 1
 
-        assert all([bucket_copy[ll] == 0 for ll in bucket_copy])
-
         if self._substitution_mode and len(allocation) < len(ALPHABET):
             stuffing = sorted(set(ALPHABET) - set(allocation.values()))
             assert len(stuffing) <= MAX_STUFFING, "Too few different characters in substitution cipher"
@@ -446,9 +444,12 @@ class Allocator:
                 letter_selected = secrets.choice(stuffing)
                 stuffing.remove(letter_selected)
                 allocation[f'{num}'] = letter_selected
+                bucket_copy[letter_selected] -= 1
                 num += 1
                 if not stuffing:
                     break
+
+        assert all([bucket_copy[ll] == 0 for ll in bucket_copy])
 
         return allocation
 
