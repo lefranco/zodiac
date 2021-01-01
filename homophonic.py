@@ -555,12 +555,12 @@ class Attacker:
                 # yes : stop looping : we have improved
                 return True
 
+            # no improvement so undo
+            self._swap(cipher1, cipher2)
+
             attempts -= 1
             if attempts == 0:
                 return False
-
-            # no improvement so undo
-            self._swap(cipher1, cipher2)
 
             if DEBUG:
                 self._check_quadgram_frequency_quality()
