@@ -35,7 +35,7 @@ EPSILON_DELTA_FLOAT = 0.000001  # to compare floats
 EPSILON_PROBA = 1 / 10  # 90% = to make sure we can give up searching
 
 MAX_STUFFING = 10
-MAX_CLIMBS = 50
+MAX_CLIMBS = 70
 MAX_BUCKET_CHANGE_ATTEMPTS = 5
 
 
@@ -629,7 +629,7 @@ def main() -> None:
     #  print(NGRAMS)
 
     dictionary_file = args.dictionary
-    limit = int(args.limit)
+    limit = int(args.limit) if args.limit is not None else None
     global DICTIONARY
     DICTIONARY = Dictionary(dictionary_file, limit)
     #  print(DICTIONARY)
@@ -660,6 +660,8 @@ def main() -> None:
     # set of buckets tried to avoid repeat
     bucket_tried: typing.Set[typing.Tuple[int, ...]] = set()
 
+    incremented: typing.Optional[str] = None
+    decremented: typing.Optional[str] = None
     new_attempt = False
 
     # outer hill climb
@@ -704,10 +706,12 @@ def main() -> None:
         bucket_tried.add(bucket_capture)
 
         if new_attempt and not improved:
-            # reverse
+            # undo bucket swap because no better
+            assert incremented is not None
+            assert decremented is not None
             BUCKET.fake_swap(incremented, decremented)  # pylint: disable=arguments-out-of-order
 
-        # find a change
+        # find a change - a bucket swap
         bucket_change_attempts = MAX_BUCKET_CHANGE_ATTEMPTS
         while True:
 
@@ -725,7 +729,7 @@ def main() -> None:
             bucket_change_attempts -= 1
             assert bucket_change_attempts, "Internal error : cannot change bucket"
 
-            # undo
+            # undo bucket swap because illegal
             BUCKET.fake_swap(incremented, decremented)  # pylint: disable=arguments-out-of-order
 
         # show
