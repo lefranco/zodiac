@@ -35,7 +35,7 @@ EPSILON_DELTA_FLOAT = 0.000001  # to compare floats
 EPSILON_PROBA = 1 / 10  # 90% = to make sure we can give up searching
 
 MAX_STUFFING = 10
-MAX_CLIMBS = 70
+MAX_CLIMBS = 20  # really cannot guess what best value here is...
 MAX_BUCKET_CHANGE_ATTEMPTS = 5
 
 
@@ -298,6 +298,10 @@ class Decrypter:
             self._reverse_table[plain].add(cipher)
         self._allocated = set(allocation.values())
 
+    def allocation(self) -> typing.Dict[str, str]:
+        """ exports allocation to rebuild crypter later on """
+        return copy.copy(self._table)
+
     def decode_some(self, cipher_part: str) -> str:
         """ decode """
         return ''.join([self._table[c] for c in cipher_part])
@@ -451,6 +455,7 @@ class Allocator:
 
 ALLOCATOR: typing.Optional[Allocator] = None
 N_OPERATIONS = 0
+BEST_QUADGRAM_QUALITY_REACHED: typing.Optional[float] = None
 
 
 class Attacker:
@@ -458,33 +463,10 @@ class Attacker:
 
     def __init__(self) -> None:
 
-        assert NGRAMS is not None
-        assert CIPHER is not None
-        assert DECRYPTER is not None
-        assert BUCKET is not None
-        assert ALLOCATOR is not None
-
-        initial_allocation = ALLOCATOR.make_allocation()
-        DECRYPTER.instantiate(initial_allocation)
-
         # a table for remembering frequencies
         self._quadgrams_frequency_quality_table: typing.Dict[str, float] = dict()
 
-        # quadgram frequency quality table
-        for quadgram in CIPHER.quadgrams_set:
-
-            # plain
-            plain = DECRYPTER.decode_some(quadgram)
-
-            # remembered
-            self._quadgrams_frequency_quality_table[quadgram] = NGRAMS.log_freq_table.get(plain, NGRAMS.worst_frequency) * CIPHER.quadgrams_number_occurence_table[quadgram]
-
-        # quadgram overall frequency quality of cipher
-        # summed
-        self._overall_quadgrams_frequency_quality = sum(self._quadgrams_frequency_quality_table.values())
-
-        if DEBUG:
-            self._check_quadgram_frequency_quality()
+        self._overall_quadgrams_frequency_quality = 0.
 
     def _check_quadgram_frequency_quality(self) -> None:
         """ Evaluates quality from quadgram frequency DEBUG """
@@ -532,8 +514,8 @@ class Attacker:
                 # summed
                 self._overall_quadgrams_frequency_quality += new_value
 
-    def _climb(self) -> bool:
-        """ climb : try to improve things... """
+    def _go_up(self) -> bool:
+        """ go up : try to improve things... """
 
         assert CIPHER is not None
         assert DECRYPTER is not None
@@ -585,17 +567,81 @@ class Attacker:
             # restore value
             self._overall_quadgrams_frequency_quality = old_overall_quadgrams_frequency_quality
 
-    def ascend(self) -> None:
-        """ ascend : keep climbing until fails to do so """
+    def _climb(self) -> None:
+        """ climb : keeps going up until fails to do so """
 
         while True:
 
             # keeps climbing until fails to do so
-            succeeded = self._climb()
+            succeeded = self._go_up()
             if not succeeded:
                 print("-", flush=True)
                 return
             print("/", end='', flush=True)
+
+    def _reset_frequencies(self) -> None:
+        """ reset_frequencies """
+
+        assert CIPHER is not None
+        assert DECRYPTER is not None
+        assert NGRAMS is not None
+
+        self._quadgrams_frequency_quality_table.clear()
+
+        # quadgram frequency quality table
+        for quadgram in CIPHER.quadgrams_set:
+
+            # plain
+            plain = DECRYPTER.decode_some(quadgram)
+
+            # remembered
+            self._quadgrams_frequency_quality_table[quadgram] = NGRAMS.log_freq_table.get(plain, NGRAMS.worst_frequency) * CIPHER.quadgrams_number_occurence_table[quadgram]
+
+        # quadgram overall frequency quality of cipher
+        # summed
+        self._overall_quadgrams_frequency_quality = sum(self._quadgrams_frequency_quality_table.values())
+
+    def make_tries(self) -> float:
+        """ make tries : this includes  random generator and inner hill climb """
+
+        assert ALLOCATOR is not None
+        assert DECRYPTER is not None
+        assert DICTIONARY is not None
+
+        # records best quality reached
+        best_quadgram_quality_reached: typing.Optional[float] = None
+
+        # limit the number of climbs
+        number_climbs = 0
+        while True:
+
+            # random allocator
+            initial_allocation = ALLOCATOR.make_allocation()
+            DECRYPTER.instantiate(initial_allocation)
+
+            # reset frequency tables from new allocation
+            self._reset_frequencies()
+
+            # start a new session : climb as high as possible
+            self._climb()
+
+            # handle local best quality
+            if best_quadgram_quality_reached is None or self._overall_quadgrams_frequency_quality > best_quadgram_quality_reached:
+
+                # beaten local, show stuff if also beaten global
+                if BEST_QUADGRAM_QUALITY_REACHED is None or self._overall_quadgrams_frequency_quality > BEST_QUADGRAM_QUALITY_REACHED:
+                    allocation = DECRYPTER.allocation()
+                    quality_reached = self._overall_quadgrams_frequency_quality
+                    solution = Solution(allocation, quality_reached)
+                    solution.show()
+
+                best_quadgram_quality_reached = self._overall_quadgrams_frequency_quality
+                number_climbs = 0
+
+            # stop at some point inner hill climb
+            number_climbs += 1
+            if number_climbs == MAX_CLIMBS:
+                return best_quadgram_quality_reached
 
     @property
     def overall_quadgrams_frequency_quality(self) -> float:
@@ -604,6 +650,34 @@ class Attacker:
 
 
 ATTACKER: typing.Optional[Attacker] = None
+
+
+class Solution:
+    """ A solution """
+
+    def __init__(self, allocation: typing.Dict[str, str], quadgrams_frequency_quality: float) -> None:
+
+        self._allocation = copy.copy(allocation)
+        self._quadgrams_frequency_quality = quadgrams_frequency_quality
+
+    def show(self) -> None:
+        """ show solution """
+
+        assert DICTIONARY is not None
+
+        # get dictionary quality of result
+        my_decrypter = Decrypter()
+        my_decrypter.instantiate(self._allocation)
+        clear = my_decrypter.apply()
+        dictionary_quality, selected_words = DICTIONARY.extracted_words(clear)
+
+        print(' '.join(selected_words))
+        print(f"{dictionary_quality=}")
+        now = time.time()
+        speed = N_OPERATIONS / (now - BEFORE)
+        print(f"{speed=}")
+        print(f"{self._quadgrams_frequency_quality=}")
+        my_decrypter.print_key()
 
 
 def main() -> None:
@@ -653,65 +727,34 @@ def main() -> None:
     #  print(f"Allocator='{ALLOCATOR}'")
 
     global ATTACKER
-
-    start_time = time.time()
-    best_trigram_quality_sofar: typing.Optional[float] = None
+    ATTACKER = Attacker()
 
     # set of buckets tried to avoid repeat
     bucket_tried: typing.Set[typing.Tuple[int, ...]] = set()
 
     incremented: typing.Optional[str] = None
     decremented: typing.Optional[str] = None
-    new_attempt = False
 
     # outer hill climb
     while True:
 
-        # inner hill climb
-        improved = False
-        number_climbs = 0
-        while True:
-
-            # start a new session
-            ATTACKER = Attacker()
-            ATTACKER.ascend()
-
-            # get dictionary quality of result
-            assert DECRYPTER is not None
-            clear = DECRYPTER.apply()
-            dictionary_quality, selected_words = DICTIONARY.extracted_words(clear)
-
-            if best_trigram_quality_sofar is None or ATTACKER.overall_quadgrams_frequency_quality > best_trigram_quality_sofar:
-                print(' '.join(selected_words))
-                print(f"{dictionary_quality=}")
-                now = time.time()
-                speed = N_OPERATIONS / (now - start_time)
-                print(f"{speed=}")
-                score = ATTACKER.overall_quadgrams_frequency_quality
-                print(f"{score=}")
-                DECRYPTER.print_key()
-                best_trigram_quality_sofar = ATTACKER.overall_quadgrams_frequency_quality
-                improved = True
-                number_climbs = 0
-
-            # stop at some point inner hill climb
-            number_climbs += 1
-            if number_climbs == MAX_CLIMBS:
-                break
-
-        # changing BUCKET for outer hill climb
-
-        # remember this bucket
+        # remember this bucket as done
         bucket_capture = tuple(BUCKET.table.values())
         bucket_tried.add(bucket_capture)
 
-        if new_attempt and not improved:
-            # undo bucket swap because no better
+        # inner hill climb (includes random allocator)
+        quality_reached = ATTACKER.make_tries()
+
+        global BEST_QUADGRAM_QUALITY_REACHED
+        if BEST_QUADGRAM_QUALITY_REACHED is None or quality_reached > BEST_QUADGRAM_QUALITY_REACHED:
+            BEST_QUADGRAM_QUALITY_REACHED = quality_reached
+        else:
+            # undo bucket swap because not better if not better
             assert incremented is not None
             assert decremented is not None
             BUCKET.fake_swap(incremented, decremented)  # pylint: disable=arguments-out-of-order
 
-        # find a change - a bucket swap
+        # find a new bucket swap
         bucket_change_attempts = MAX_BUCKET_CHANGE_ATTEMPTS
         while True:
 
@@ -725,9 +768,11 @@ def main() -> None:
             if new_bucket_capture not in bucket_tried:
                 break
 
-            # need a check
+            # have tried too much the bucket change ?
             bucket_change_attempts -= 1
-            assert bucket_change_attempts, "Internal error : cannot change bucket"
+            if not bucket_change_attempts:
+                print("Cannot do any more bucket change")
+                return
 
             # undo bucket swap because illegal
             BUCKET.fake_swap(incremented, decremented)  # pylint: disable=arguments-out-of-order
@@ -736,7 +781,6 @@ def main() -> None:
         print("=============================================")
         print(f"{decremented=} {incremented=}")
         print(f"New Bucket='{BUCKET}'")
-        new_attempt = True
 
 
 if __name__ == '__main__':
