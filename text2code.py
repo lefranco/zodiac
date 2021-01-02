@@ -84,6 +84,8 @@ class Crypter:
     def print_key(self, file_handle: typing.TextIO) -> None:
         """ print_key """
 
+        assert CIPHER is not None
+
         with contextlib.redirect_stdout(file_handle):
 
             print("-" * len(ALPHABET))
