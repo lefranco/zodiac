@@ -34,9 +34,10 @@ EPSILON_NO_OCCURENCES_NGRAM = 0.01  # zero has - infinite as log, must be << 1
 EPSILON_DELTA_FLOAT = 0.000001  # to compare floats
 EPSILON_PROBA = 1 / 10  # 90% = to make sure we can give up searching
 
-MAX_STUFFING = 10
-MAX_CLIMBS = 20  # really cannot guess what best value here is...
+MAX_SUBSTITUTION_STUFFING = 10
+MAX_CLIMBS = 10  # really cannot guess what best value here is...
 MAX_BUCKET_CHANGE_ATTEMPTS = 5
+MAX_BUCKET_SIZE = 9   # keep it to one digit
 
 
 class Letters:
@@ -53,7 +54,7 @@ class Letters:
                 frequency = int(letter_str)
                 raw_frequency_table[letter] = frequency
 
-        assert len(raw_frequency_table) == len(ALPHABET)
+        assert len(raw_frequency_table) == len(ALPHABET), "Problem with letters frequencies file content"
 
         sum_occurences = sum(raw_frequency_table.values())
 
@@ -88,7 +89,7 @@ class Ngrams:
                 quadgram_read, frequency_str = line.split()
                 quadgram = quadgram_read.lower()
                 if self._size:
-                    assert len(quadgram) == self._size
+                    assert len(quadgram) == self._size, "Problem with ngram file content"
                 else:
                     self._size = len(quadgram)
                 frequency = int(frequency_str)
@@ -224,7 +225,7 @@ class Cipher:
 
                         # substituion mode : check in alphabet, store as upper case
                         if substitution_mode:
-                            assert code.lower() in ALPHABET
+                            assert code.lower() in ALPHABET, f"Problem in substituion cipher with code {code}"
                             code = code.upper()
 
                         self._content.append(code)
@@ -320,7 +321,7 @@ class Decrypter:
 
         # just a little check
         # optimized away
-        assert plain1 != plain2
+        #  assert plain1 != plain2, "Internal error"
 
         # swap
         self._table[cipher1], self._table[cipher2] = self._table[cipher2], self._table[cipher1]
@@ -398,18 +399,32 @@ class Bucket:
     def fake_swap(self, decremented: str, incremented: str) -> None:
         """ swap letters in allocator """
 
-        assert incremented != decremented
-        assert self._table[decremented]
+        # just a little check
+        assert incremented != decremented, "Internal error"
+
+        assert self._table[decremented], "Internal error"
         self._table[decremented] -= 1
         self._table[incremented] += 1
+        assert self._table[incremented] <= MAX_BUCKET_SIZE, f"Cannot handle buckets with more than {MAX_BUCKET_SIZE} capacity"
+
+    def print_repartition(self) -> None:
+        """ print_repartition """
+
+        print("." * len(ALPHABET))
+        print(''.join(ALPHABET))
+        for letter in ALPHABET:
+            number = self._table[letter]
+            if number:
+                print(number, end='')
+            else:
+                print(' ', end='')
+        print()
+        print("." * len(ALPHABET))
 
     @property
     def table(self) -> typing.Dict[str, int]:
         """ property """
         return self._table
-
-    def __str__(self) -> str:
-        return str(self._table)
 
 
 BUCKET: typing.Optional[Bucket] = None
@@ -438,7 +453,7 @@ class Allocator:
 
         if self._substitution_mode and len(allocation) < len(ALPHABET):
             stuffing = sorted(set(ALPHABET) - set(allocation.values()))
-            assert len(stuffing) <= MAX_STUFFING, "Too few different characters in substitution cipher"
+            assert len(stuffing) <= MAX_SUBSTITUTION_STUFFING, "Too few different characters in substitution cipher"
             num = 0
             while True:
                 letter_selected = secrets.choice(stuffing)
@@ -449,7 +464,7 @@ class Allocator:
                 if not stuffing:
                     break
 
-        assert all([bucket_copy[ll] == 0 for ll in bucket_copy])
+        assert all([bucket_copy[ll] == 0 for ll in bucket_copy]), "Internal error"
 
         return allocation
 
@@ -484,7 +499,7 @@ class Attacker:
             quadgram = plain[position: position + NGRAMS.size]
             qcheck += NGRAMS.log_freq_table.get(quadgram, NGRAMS.worst_frequency)
 
-        assert abs(qcheck - self._overall_quadgrams_frequency_quality) < EPSILON_DELTA_FLOAT
+        assert abs(qcheck - self._overall_quadgrams_frequency_quality) < EPSILON_DELTA_FLOAT, "Debug mode detected an error"
 
     def _swap(self, cipher1: str, cipher2: str) -> None:
         """ swap: this is where most CPU time is spent in the program """
@@ -721,7 +736,8 @@ def main() -> None:
 
     global BUCKET
     BUCKET = Bucket(substitution_mode)
-    print(f"Initial Bucket='{BUCKET}'")
+    print("Initial Bucket:")
+    BUCKET.print_repartition()
 
     global ALLOCATOR
     ALLOCATOR = Allocator(substitution_mode)
@@ -751,8 +767,8 @@ def main() -> None:
             BEST_QUADGRAM_QUALITY_REACHED = quality_reached
         else:
             # undo bucket swap because not better if not better
-            assert incremented is not None
-            assert decremented is not None
+            assert incremented is not None, "Internal error"
+            assert decremented is not None, "Internal error"
             BUCKET.fake_swap(incremented, decremented)  # pylint: disable=arguments-out-of-order
 
         # find a new bucket swap
@@ -781,7 +797,8 @@ def main() -> None:
         # show
         print("=============================================")
         print(f"{decremented=} {incremented=}")
-        print(f"New Bucket='{BUCKET}'")
+        print("New Bucket:")
+        BUCKET.print_repartition()
 
 
 if __name__ == '__main__':
