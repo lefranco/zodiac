@@ -35,7 +35,7 @@ EPSILON_DELTA_FLOAT = 0.000001  # to compare floats
 EPSILON_PROBA = 1 / 10  # 90% = to make sure we can give up searching
 
 MAX_SUBSTITUTION_STUFFING = 10
-MAX_CLIMBS = 10  # really cannot guess what best value here is...
+MAX_CLIMBS = 20  # TODO : should be inversly proportional to cipher length
 MAX_BUCKET_CHANGE_ATTEMPTS = 5
 MAX_BUCKET_SIZE = 9   # keep it to one digit
 
@@ -761,6 +761,9 @@ def main() -> None:
 
         # inner hill climb (includes random allocator)
         quality_reached = ATTACKER.make_tries()
+
+        if substitution_mode:
+            break
 
         global BEST_QUADGRAM_QUALITY_REACHED
         if BEST_QUADGRAM_QUALITY_REACHED is None or quality_reached > BEST_QUADGRAM_QUALITY_REACHED:
