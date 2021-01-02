@@ -35,9 +35,12 @@ EPSILON_DELTA_FLOAT = 0.000001  # to compare floats
 EPSILON_PROBA = 1 / 10  # 90% = to make sure we can give up searching
 
 MAX_SUBSTITUTION_STUFFING = 10
-MAX_CLIMBS = 20  # TODO : should be inversly proportional to cipher length
 MAX_BUCKET_CHANGE_ATTEMPTS = 5
 MAX_BUCKET_SIZE = 9   # keep it to one digit
+
+K_CIPHER_DIFFICULTY = 250
+MIN_ATTACKER_CLIMBS = 10
+MAX_ATTACKER_CLIMBS = 50
 
 
 class Letters:
@@ -250,6 +253,13 @@ class Cipher:
         for quadgram in self._quadgrams_set:
             for code in quadgram:
                 self._quadgrams_localization_table[code].append(quadgram)
+
+    def difficulty(self) -> int:
+        """ climb_difficulty """
+        difficulty_from_codes = (len(self._cipher_codes) / len(ALPHABET)) ** 2
+        easiness_from_size = math.sqrt(len(self._content))
+        res = K_CIPHER_DIFFICULTY * difficulty_from_codes * easiness_from_size
+        return res
 
     @property
     def cipher_codes(self) -> str:
@@ -479,10 +489,19 @@ class Attacker:
 
     def __init__(self) -> None:
 
+        assert CIPHER is not None
+
         # a table for remembering frequencies
         self._quadgrams_frequency_quality_table: typing.Dict[str, float] = dict()
 
         self._overall_quadgrams_frequency_quality = 0.
+
+        # number of climbs = cipher difficulty
+        self._number_climbs = CIPHER.difficulty()
+        self._number_climbs = min(MAX_ATTACKER_CLIMBS, self._number_climbs)
+        self._number_climbs = max(MIN_ATTACKER_CLIMBS, self._number_climbs)
+
+        print(f"{self._number_climbs=}")
 
     def _check_quadgram_frequency_quality(self) -> None:
         """ Evaluates quality from quadgram frequency DEBUG """
@@ -628,7 +647,7 @@ class Attacker:
         best_quadgram_quality_reached: typing.Optional[float] = None
 
         # limit the number of climbs
-        number_climbs = 0
+        number_climbs_left = self._number_climbs
         while True:
 
             # random allocator
@@ -652,11 +671,11 @@ class Attacker:
                     solution.show()
 
                 best_quadgram_quality_reached = self._overall_quadgrams_frequency_quality
-                number_climbs = 0
+                number_climbs_left = self._number_climbs = 0
 
             # stop at some point inner hill climb
-            number_climbs += 1
-            if number_climbs == MAX_CLIMBS:
+            number_climbs_left -= 1
+            if not number_climbs_left:
                 return best_quadgram_quality_reached
 
     @property
