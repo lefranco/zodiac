@@ -17,6 +17,7 @@ import typing
 import math
 import functools
 import copy
+import contextlib
 import pprint
 import secrets  # instead of random
 
@@ -38,7 +39,7 @@ MAX_SUBSTITUTION_STUFFING = 10
 MAX_BUCKET_CHANGE_ATTEMPTS = 5
 MAX_BUCKET_SIZE = 9   # keep it to one digit
 
-K_CIPHER_DIFFICULTY = 250
+K_CIPHER_DIFFICULTY = 250.
 MIN_ATTACKER_CLIMBS = 10
 MAX_ATTACKER_CLIMBS = 50
 
@@ -63,6 +64,14 @@ class Letters:
 
         # for normal values
         self._freq_table = {q: raw_frequency_table[q] / sum_occurences for q in raw_frequency_table}
+
+    def quality(self, bucket: typing.Tuple[int]) -> float:
+        """ quality of a bucket : how close from ideal frequency of letters """
+
+        assert len(bucket) == len(ALPHABET), "Internal error"
+        sum_occurences = sum(bucket)
+        frequencies = {ll: bucket[n] / sum_occurences for n, ll in enumerate(ALPHABET)}
+        return - sum([abs(frequencies[ll] - self._freq_table[ll]) for ll in frequencies])
 
     @property
     def freq_table(self) -> typing.Dict[str, float]:
@@ -258,7 +267,7 @@ class Cipher:
         """ climb_difficulty """
         difficulty_from_codes = (len(self._cipher_codes) / len(ALPHABET)) ** 2
         easiness_from_size = math.sqrt(len(self._content))
-        res = K_CIPHER_DIFFICULTY * difficulty_from_codes * easiness_from_size
+        res = int(K_CIPHER_DIFFICULTY * difficulty_from_codes / easiness_from_size)
         return res
 
     @property
@@ -346,22 +355,23 @@ class Decrypter:
         self._reverse_table[plain2].remove(cipher2)
         self._reverse_table[plain1].add(cipher2)
 
-    def print_key(self) -> None:
+    def print_key(self, file_handle: typing.TextIO) -> None:
         """ print_key """
 
-        print("-" * len(ALPHABET))
-        print(''.join(ALPHABET))
-        most_affected = max([len(s) for s in self._reverse_table.values()])
-        for rank in range(most_affected):
-            for letter in ALPHABET:
-                ciphers = sorted(self._reverse_table[letter])
-                if rank < len(ciphers):
-                    cipher = ciphers[rank]
-                    print(cipher, end='')
-                else:
-                    print(' ', end='')
-            print()
-        print("-" * len(ALPHABET))
+        with contextlib.redirect_stdout(file_handle):
+            print("-" * len(ALPHABET))
+            print(''.join(ALPHABET))
+            most_affected = max([len(s) for s in self._reverse_table.values()])
+            for rank in range(most_affected):
+                for letter in ALPHABET:
+                    ciphers = sorted(self._reverse_table[letter])
+                    if rank < len(ciphers):
+                        cipher = ciphers[rank]
+                        print(cipher, end='')
+                    else:
+                        print(' ', end='')
+                print()
+            print("-" * len(ALPHABET))
 
     @property
     def allocated(self) -> typing.Set[str]:
@@ -406,7 +416,10 @@ class Bucket:
                 if sum(self._table.values()) == number_codes:
                     break
 
-    def fake_swap(self, decremented: str, incremented: str) -> None:
+        # set of buckets tried to avoid repeat (in tuple form)
+        self._bucket_tried: typing.Set[typing.Tuple[int, ...]] = set()
+
+    def _fake_swap(self, decremented: str, incremented: str) -> None:
         """ swap letters in allocator """
 
         # just a little check
@@ -417,19 +430,52 @@ class Bucket:
         self._table[incremented] += 1
         assert self._table[incremented] <= MAX_BUCKET_SIZE, f"Cannot handle buckets with more than {MAX_BUCKET_SIZE} capacity"
 
-    def print_repartition(self) -> None:
+    def make_fake_swap(self) -> bool:
+        """ find a new bucket swap return success """
+
+        bucket_change_attempts = MAX_BUCKET_CHANGE_ATTEMPTS
+        while True:
+
+            # find two  letter
+            decremented = secrets.choice([ll for ll in self._table if self._table[ll]])
+            incremented = secrets.choice(list(set(self._table) - set([decremented])))
+
+            # is it new ?
+            self._fake_swap(decremented, incremented)
+            new_bucket_capture = tuple(self._table.values())
+            if new_bucket_capture not in self._bucket_tried:
+                # show
+                print(f"{decremented=} {incremented=}")
+                return True
+
+            # undo bucket swap because already done
+            self._fake_swap(incremented, decremented)  # pylint: disable=arguments-out-of-order
+
+            # have tried too much the bucket change ?
+            bucket_change_attempts -= 1
+            if not bucket_change_attempts:
+                print("Cannot do any more bucket change")
+                return False
+
+    def remember(self) -> None:
+        """ remember """
+        bucket_capture = tuple(self._table.values())
+        self._bucket_tried.add(bucket_capture)
+
+    def print_repartition(self, file_handle: typing.TextIO) -> None:
         """ print_repartition """
 
-        print("." * len(ALPHABET))
-        print(''.join(ALPHABET))
-        for letter in ALPHABET:
-            number = self._table[letter]
-            if number:
-                print(number, end='')
-            else:
-                print(' ', end='')
-        print()
-        print("." * len(ALPHABET))
+        with contextlib.redirect_stdout(file_handle):
+            print("." * len(ALPHABET))
+            print(''.join(ALPHABET))
+            for letter in ALPHABET:
+                number = self._table[letter]
+                if number:
+                    print(number, end='')
+                else:
+                    print(' ', end='')
+            print()
+            print("." * len(ALPHABET))
 
     @property
     def table(self) -> typing.Dict[str, int]:
@@ -501,7 +547,7 @@ class Attacker:
         self._number_climbs = min(MAX_ATTACKER_CLIMBS, self._number_climbs)
         self._number_climbs = max(MIN_ATTACKER_CLIMBS, self._number_climbs)
 
-        print(f"{self._number_climbs=}")
+        print(f"Inner hill climb will use max={self._number_climbs=}")
 
     def _check_quadgram_frequency_quality(self) -> None:
         """ Evaluates quality from quadgram frequency DEBUG """
@@ -711,8 +757,8 @@ class Solution:
         now = time.time()
         speed = N_OPERATIONS / (now - BEFORE)
         print(f"{speed=}")
-        print(f"{self._quadgrams_frequency_quality=}")
-        my_decrypter.print_key()
+        print(f"Quadgram quality={self._quadgrams_frequency_quality=}")
+        my_decrypter.print_key(sys.stdout)
 
 
 def main() -> None:
@@ -756,7 +802,12 @@ def main() -> None:
     global BUCKET
     BUCKET = Bucket(substitution_mode)
     print("Initial Bucket:")
-    BUCKET.print_repartition()
+    BUCKET.print_repartition(sys.stdout)
+
+    # print bucket quality
+    bucket_capture = tuple(BUCKET.table.values())
+    bucket_quality = LETTERS.quality(bucket_capture)
+    print(f"{bucket_quality=}")
 
     global ALLOCATOR
     ALLOCATOR = Allocator(substitution_mode)
@@ -765,18 +816,8 @@ def main() -> None:
     global ATTACKER
     ATTACKER = Attacker()
 
-    # set of buckets tried to avoid repeat
-    bucket_tried: typing.Set[typing.Tuple[int, ...]] = set()
-
-    incremented: typing.Optional[str] = None
-    decremented: typing.Optional[str] = None
-
     # outer hill climb
     while True:
-
-        # remember this bucket as done
-        bucket_capture = tuple(BUCKET.table.values())
-        bucket_tried.add(bucket_capture)
 
         # inner hill climb (includes random allocator)
         quality_reached = ATTACKER.make_tries()
@@ -787,40 +828,24 @@ def main() -> None:
         global BEST_QUADGRAM_QUALITY_REACHED
         if BEST_QUADGRAM_QUALITY_REACHED is None or quality_reached > BEST_QUADGRAM_QUALITY_REACHED:
             BEST_QUADGRAM_QUALITY_REACHED = quality_reached
-        else:
-            # undo bucket swap because not better if not better
-            assert incremented is not None, "Internal error"
-            assert decremented is not None, "Internal error"
-            BUCKET.fake_swap(incremented, decremented)  # pylint: disable=arguments-out-of-order
 
-        # find a new bucket swap
-        bucket_change_attempts = MAX_BUCKET_CHANGE_ATTEMPTS
-        while True:
+        # remember this bucket as done
+        BUCKET.remember()
 
-            # find two  letter
-            decremented = secrets.choice([ll for ll in BUCKET.table if BUCKET.table[ll]])
-            incremented = secrets.choice(list(set(BUCKET.table) - set([decremented])))
+        # change bucket if still possible
+        status = BUCKET.make_fake_swap()
+        if not status:
+            break
 
-            # is it new ?
-            BUCKET.fake_swap(decremented, incremented)
-            new_bucket_capture = tuple(BUCKET.table.values())
-            if new_bucket_capture not in bucket_tried:
-                break
-
-            # have tried too much the bucket change ?
-            bucket_change_attempts -= 1
-            if not bucket_change_attempts:
-                print("Cannot do any more bucket change")
-                return
-
-            # undo bucket swap because illegal
-            BUCKET.fake_swap(incremented, decremented)  # pylint: disable=arguments-out-of-order
-
-        # show
+        # show new bucket
         print("=============================================")
-        print(f"{decremented=} {incremented=}")
         print("New Bucket:")
-        BUCKET.print_repartition()
+        BUCKET.print_repartition(sys.stdout)
+
+        # print bucket quality
+        bucket_capture = tuple(BUCKET.table.values())
+        bucket_quality = LETTERS.quality(bucket_capture)
+        print(f"{bucket_quality=}")
 
 
 if __name__ == '__main__':
