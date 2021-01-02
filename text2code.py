@@ -11,6 +11,7 @@ import argparse
 import collections
 import unicodedata
 import pprint
+import contextlib
 import secrets  # instead of random
 
 ALPHABET = [chr(i) for i in range(ord('a'), ord('z') + 1)]
@@ -80,11 +81,22 @@ class Crypter:
         """ encode """
         return secrets.choice(self._table[char])
 
-    def __str__(self) -> str:
-        def encoded(plain: str) -> str:
-            assert CIPHER is not None
-            return ' '.join(self._table[plain]) if plain in CIPHER.clear_content else ''
-        return '\n'.join([f"{plain} : {encoded(plain)}" for plain in ALPHABET])
+    def print_key(self) -> None:
+        """ print_key """
+
+        print("-" * len(ALPHABET))
+        print(''.join(ALPHABET))
+        most_affected = max([len(s) for s in self._table.values()])
+        for rank in range(most_affected):
+            for letter in ALPHABET:
+                ciphers = sorted(self._table[letter])
+                if rank < len(ciphers):
+                    cipher = ciphers[rank]
+                    print(cipher, end='')
+                else:
+                    print(' ', end='')
+            print()
+        print("-" * len(ALPHABET))
 
 
 CRYPTER: typing.Optional[Crypter]
@@ -167,7 +179,8 @@ def main() -> None:
         crypter_output_file = args.dump
         # will not print characters absent from cipher
         with open(crypter_output_file, 'w') as file_handle:
-            print(CRYPTER, file=file_handle)
+            with contextlib.redirect_stdout(file_handle):
+                CRYPTER.print_key()
 
 
 if __name__ == '__main__':
