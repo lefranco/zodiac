@@ -267,7 +267,7 @@ class Cipher:
         """ climb_difficulty """
         print(f"We have a cipher with {len(self._cipher_codes)} different codes and a length of {len(self._content)}")
         difficulty_from_codes = (len(self._cipher_codes) / len(ALPHABET)) ** 2
-        easiness_from_size = math.sqrt(len(self._cipher_codes) / len(ALPHABET))
+        easiness_from_size = math.sqrt(len(self._content) / len(self._cipher_codes))
         res = int(K_CIPHER_DIFFICULTY * difficulty_from_codes / easiness_from_size)
         return res
 
