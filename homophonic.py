@@ -407,7 +407,6 @@ class Bucket:
             with open(hint_file) as filepointer:
                 for num, line in enumerate(filepointer):
                     line = line.rstrip('\n')
-                    print(f"{line=}")
                     if num in [0, 3]:
                         assert line == '-' * len(ALPHABET), f"Incorrect hint file line {num+1}"
                     elif num == 1:
@@ -561,7 +560,7 @@ class Attacker:
         self._number_climbs = min(MAX_ATTACKER_CLIMBS, self._number_climbs)
         self._number_climbs = max(MIN_ATTACKER_CLIMBS, self._number_climbs)
 
-        print(f"Inner hill climb will use max={self._number_climbs=}")
+        print(f"Inner hill climb will use max={self._number_climbs}")
 
     def _check_quadgram_frequency_quality(self) -> None:
         """ Evaluates quality from quadgram frequency DEBUG """
