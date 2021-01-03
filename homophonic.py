@@ -30,10 +30,9 @@ DEBUG = False
 RECURSION_LIMIT = 1500  # default is 1000
 
 ALPHABET = [chr(i) for i in range(ord('a'), ord('z') + 1)]  # plain always lower case
-EPSILON_NO_OCCURENCES_DICTIONARY = 1e-99  # zero has - infinite as log, must be << 1
-EPSILON_NO_OCCURENCES_NGRAM = 0.01  # zero has - infinite as log, must be << 1
+EPSILON_NO_OCCURENCES = 1e-99  # zero has - infinite as log, must be << 1
 EPSILON_DELTA_FLOAT = 0.000001  # to compare floats
-EPSILON_PROBA = 1 / 10  # 90% = to make sure we can give up searching
+EPSILON_PROBA = 1 / 20  # 95% = to make sure we can give up searching
 
 MAX_SUBSTITUTION_STUFFING = 10
 MAX_BUCKET_CHANGE_ATTEMPTS = 5
@@ -115,7 +114,7 @@ class Ngrams:
         # for normal values
         self._log_freq_table = {q: math.log10(raw_frequency_table[q] / sum_occurences) for q in raw_frequency_table}
 
-        self._worst_frequency = math.log10(EPSILON_NO_OCCURENCES_NGRAM / sum_occurences)
+        self._worst_frequency = math.log10(EPSILON_NO_OCCURENCES / sum_occurences)
 
         after = time.time()
         elapsed = after - before
@@ -178,7 +177,7 @@ class Dictionary:
         # pass two : enter data
         sum_occurences = sum(raw_frequency_table.values())
         self._log_frequency_table = {w: math.log10(raw_frequency_table[w] / sum_occurences) for w in raw_frequency_table}
-        self._worst_frequency = math.log10(EPSILON_NO_OCCURENCES_DICTIONARY / sum_occurences)
+        self._worst_frequency = math.log10(EPSILON_NO_OCCURENCES / sum_occurences)
 
         # longest word
         self._longest_word_size = max([len(w) for w in self._log_frequency_table])
@@ -837,7 +836,7 @@ def main() -> None:
         # inner hill climb (includes random allocator)
         quality_reached = ATTACKER.make_tries()
 
-        if substitution_mode:
+        if substitution_mode or hint_file is not None:
             break
 
         global BEST_QUADGRAM_QUALITY_REACHED
