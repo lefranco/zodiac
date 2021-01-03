@@ -174,7 +174,7 @@ def main() -> None:
 
     parser = argparse.ArgumentParser()
     parser.add_argument('-l', '--letters', required=True, help='input a file with frequency table for letters')
-    parser.add_argument('-i', '--input', required=True, help='input file with clear (can have spaces within - will be removed - can have accents - will be corrected)')
+    parser.add_argument('-i', '--input', required=True, help='input file with plain (can have spaces within - will be removed - can have accents - will be corrected)')
     parser.add_argument('-s', '--substitution_mode', required=False, help='cipher is simple substitution (not homophonic)', action='store_true')
     parser.add_argument('-n', '--number', required=True, help='number of distinct characters to put in cipher if homophonic')
     parser.add_argument('-o', '--output', required=True, help='output a file with ciphers')
