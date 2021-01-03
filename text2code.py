@@ -105,6 +105,27 @@ class Crypter:
                 print()
             print("-" * len(ALPHABET))
 
+    def print_hint(self, file_handle: typing.TextIO) -> None:
+        """ print_hint """
+
+        assert CIPHER is not None
+
+        with contextlib.redirect_stdout(file_handle):
+
+            print("-" * len(ALPHABET))
+            print(''.join(ALPHABET))
+            for letter in ALPHABET:
+                if letter in CIPHER.clear_content:
+                    size = len(self._table[letter])
+                    if size:
+                        print(size, end='')
+                    else:
+                        print(' ', end='')
+                else:
+                    print(' ', end='')
+            print()
+            print("-" * len(ALPHABET))
+
 
 CRYPTER: typing.Optional[Crypter]
 
@@ -157,7 +178,8 @@ def main() -> None:
     parser.add_argument('-s', '--substitution_mode', required=False, help='cipher is simple substitution (not homophonic)', action='store_true')
     parser.add_argument('-n', '--number', required=True, help='number of distinct characters to put in cipher if homophonic')
     parser.add_argument('-o', '--output', required=True, help='output a file with ciphers')
-    parser.add_argument('-d', '--dump', required=False, help='dump crypter to file')
+    parser.add_argument('-K', '--key_dump', required=False, help='dump crypter key to file')
+    parser.add_argument('-H', '--hint_dump', required=False, help='dump crypter hint to file')
     args = parser.parse_args()
 
     letters_file = args.letters
@@ -182,11 +204,17 @@ def main() -> None:
     with open(cipher_output_file, 'w') as file_handle:
         print(CIPHER, file=file_handle)
 
-    if args.dump:
-        crypter_output_file = args.dump
+    if args.key_dump:
+        crypter_output_file = args.key_dump
         # will not print characters absent from cipher
         with open(crypter_output_file, 'w') as file_handle:
             CRYPTER.print_key(file_handle)
+
+    if args.hint_dump:
+        crypter_output_file = args.hint_dump
+        # will not print characters absent from cipher
+        with open(crypter_output_file, 'w') as file_handle:
+            CRYPTER.print_hint(file_handle)
 
 
 if __name__ == '__main__':
