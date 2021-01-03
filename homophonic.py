@@ -39,9 +39,9 @@ MAX_SUBSTITUTION_STUFFING = 10
 MAX_BUCKET_CHANGE_ATTEMPTS = 5
 MAX_BUCKET_SIZE = 9   # keep it to one digit
 
-K_CIPHER_DIFFICULTY = 250.
+K_CIPHER_DIFFICULTY = 50.
 MIN_ATTACKER_CLIMBS = 10
-MAX_ATTACKER_CLIMBS = 50
+MAX_ATTACKER_CLIMBS = 100
 
 
 class Letters:
@@ -265,8 +265,9 @@ class Cipher:
 
     def difficulty(self) -> int:
         """ climb_difficulty """
+        print(f"We have a cipher with {len(self._cipher_codes)} different codes and a length of {len(self._content)}")
         difficulty_from_codes = (len(self._cipher_codes) / len(ALPHABET)) ** 2
-        easiness_from_size = math.sqrt(len(self._content))
+        easiness_from_size = math.sqrt(len(self._cipher_codes) / len(ALPHABET))
         res = int(K_CIPHER_DIFFICULTY * difficulty_from_codes / easiness_from_size)
         return res
 
@@ -762,8 +763,8 @@ class Solution:
         # get dictionary quality of result
         my_decrypter = Decrypter()
         my_decrypter.instantiate(self._allocation)
-        clear = my_decrypter.apply()
-        dictionary_quality, selected_words = DICTIONARY.extracted_words(clear)
+        plain = my_decrypter.apply()
+        dictionary_quality, selected_words = DICTIONARY.extracted_words(plain)
 
         print(' '.join(selected_words))
         print(f"{dictionary_quality=}")
