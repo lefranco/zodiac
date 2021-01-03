@@ -264,7 +264,7 @@ class Cipher:
 
     def difficulty(self) -> int:
         """ climb_difficulty """
-        print(f"We have a cipher with {len(self._cipher_codes)} different codes and a length of {len(self._content)}")
+        print(f"INFORMATION: We have a cipher with {len(self._cipher_codes)} different codes and a length of {len(self._content)}")
         difficulty_from_codes = (len(self._cipher_codes) / len(ALPHABET)) ** 2
         easiness_from_size = math.sqrt(len(self._content) / len(self._cipher_codes))
         res = int(K_CIPHER_DIFFICULTY * difficulty_from_codes / easiness_from_size)
@@ -560,7 +560,7 @@ class Attacker:
         self._number_climbs = min(MAX_ATTACKER_CLIMBS, self._number_climbs)
         self._number_climbs = max(MIN_ATTACKER_CLIMBS, self._number_climbs)
 
-        print(f"Inner hill climb will use max={self._number_climbs}")
+        print(f"INFORMATION: Inner hill climb will use max={self._number_climbs}")
 
     def _check_quadgram_frequency_quality(self) -> None:
         """ Evaluates quality from quadgram frequency DEBUG """
