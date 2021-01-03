@@ -730,7 +730,7 @@ class Attacker:
                     solution.show()
 
                 best_quadgram_quality_reached = self._overall_quadgrams_frequency_quality
-                number_climbs_left = self._number_climbs = 0
+                number_climbs_left = self._number_climbs
 
             # stop at some point inner hill climb
             number_climbs_left -= 1
