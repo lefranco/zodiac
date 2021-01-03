@@ -65,7 +65,7 @@ class Letters:
         # for normal values
         self._freq_table = {q: raw_frequency_table[q] / sum_occurences for q in raw_frequency_table}
 
-    def quality(self, bucket: typing.Tuple[int]) -> float:
+    def quality(self, bucket: typing.Tuple[int, ...]) -> float:
         """ quality of a bucket : how close from ideal frequency of letters """
 
         assert len(bucket) == len(ALPHABET), "Internal error"
@@ -393,13 +393,27 @@ DECRYPTER: typing.Optional[Decrypter] = None
 class Bucket:
     """ A bucket : says how many ciphers could be allocated to every alphabet letter """
 
-    def __init__(self, substitution_mode: bool) -> None:
+    def __init__(self, substitution_mode: bool, hint_file: typing.Optional[str]) -> None:
 
         assert CIPHER is not None
 
         if substitution_mode:
 
+            assert hint_file is None, "There cannot be a hint file in substitution mode"
             self._table = {ll: 1 for ll in sorted(ALPHABET, key=lambda ll: LETTERS.freq_table[ll], reverse=True)}  # type: ignore
+
+        elif hint_file is not None:
+
+            with open(hint_file) as filepointer:
+                for num, line in enumerate(filepointer):
+                    line = line.rstrip('\n')
+                    print(f"{line=}")
+                    if num in [0, 3]:
+                        assert line == '-' * len(ALPHABET), f"Incorrect hint file line {num+1}"
+                    elif num == 1:
+                        assert line == ''.join(ALPHABET), f"Incorrect hint file line {num+1}"
+                    elif num == 2:
+                        self._table = {ll: int(line[n]) if line[n] != ' ' else 0 for n, ll in enumerate(ALPHABET)}
 
         else:
 
@@ -770,6 +784,7 @@ def main() -> None:
     parser.add_argument('-L', '--limit', required=False, help='limit for the dictionary words to use')
     parser.add_argument('-l', '--letters', required=True, help='input a file with frequency table for letters')
     parser.add_argument('-c', '--cipher', required=True, help='cipher to attack')
+    parser.add_argument('-H', '--hint_file', required=False, help='file with hint (sizes of buckets) in cipher')
     parser.add_argument('-s', '--substitution_mode', required=False, help='cipher is simple substitution (not homophonic)', action='store_true')
     args = parser.parse_args()
 
@@ -790,7 +805,6 @@ def main() -> None:
     #  print(DICTIONARY)
 
     substitution_mode = args.substitution_mode
-
     cipher_file = args.cipher
     global CIPHER
     CIPHER = Cipher(cipher_file, substitution_mode)
@@ -799,8 +813,9 @@ def main() -> None:
     global DECRYPTER
     DECRYPTER = Decrypter()
 
+    hint_file = args.hint_file
     global BUCKET
-    BUCKET = Bucket(substitution_mode)
+    BUCKET = Bucket(substitution_mode, hint_file)
     print("Initial Bucket:")
     BUCKET.print_repartition(sys.stdout)
 
