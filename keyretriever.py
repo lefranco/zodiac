@@ -12,7 +12,7 @@ import collections
 import unicodedata
 import contextlib
 import itertools
-
+import sys
 
 ALPHABET = [chr(i) for i in range(ord('a'), ord('z') + 1)]
 CRYPT_CHARACTERS = [chr(i) for i in range(ord('!'), ord('~') + 1)]
@@ -39,12 +39,21 @@ class Plain:
                                 continue
                             self._clear_content.append(letter)
 
+        # the plain as it appears
         self._plain_str = ''.join(self._clear_content)
+
+        # the different letters in plain
+        self._plain_letters = ''.join(sorted(set(self._clear_content)))
 
     @property
     def clear_content(self) -> typing.List[str]:
         """ property """
         return self._clear_content
+
+    @property
+    def plain_letters(self) -> str:
+        """ property """
+        return self._plain_letters
 
     @property
     def plain_str(self) -> str:
@@ -92,6 +101,7 @@ class Cipher:
     def __str__(self) -> str:
         return self._cipher_str
 
+
 CIPHER: typing.Optional[Cipher] = None
 
 
@@ -105,17 +115,38 @@ class Crypter:
 
         # rebuild key
         self._table: typing.Dict[str, typing.Set[str]] = collections.defaultdict(set)
+        self._reverse_table: typing.Dict[str, str] = dict()
 
-        assert len(PLAIN.plain_str) == len(CIPHER.cipher_str), "Cipher and plain do not have same length"
+        if len(PLAIN.plain_str) != len(CIPHER.cipher_str):
+            print(PLAIN.plain_str)
+            print(CIPHER.cipher_str)
+            print("ERROR: Cipher and plain do not have same length")
+            sys.exit(1)
 
-        for cipher, plain in zip(PLAIN.plain_str, CIPHER.cipher_str):
-            self._table[cipher].add(plain)
+        position = 0
+        for plain, cipher in zip(PLAIN.plain_str, CIPHER.cipher_str):
+            self._table[plain].add(cipher)
+
+            if cipher not in self._reverse_table:
+                self._reverse_table[cipher] = plain
+            else:
+                if self._reverse_table[cipher] != plain:
+
+                    print("-" * position)
+                    print(PLAIN.plain_str[:position + 1], end='')
+                    print(" <<<")
+                    print(CIPHER.cipher_str[:position + 1], end='')
+                    print(" <<<")
+                    print(f"ERROR: Cipher '{cipher}' is now '{plain}' but was previously '{self._reverse_table[cipher]}'")
+                    sys.exit(1)
+
+            position += 1
 
         # check
-        for cipher1, cipher2 in itertools.combinations(CIPHER.cipher_codes, 2):
-            common = self._table[cipher1] & self._table[cipher2]
+        for plain1, plain2 in itertools.combinations(PLAIN.plain_letters, 2):
+            common = self._table[plain1] & self._table[plain2]
             common_show = ' '.join(common)
-            assert not common, f"Conflict for {cipher1} and {cipher2} both encoding '{common_show}'"
+            assert not common, f"Conflict for plains {plain1} and {plain2} both encoded by ciphers {common_show}"
 
     def print_key(self, file_handle: typing.TextIO) -> None:
         """ print_key """
@@ -129,7 +160,7 @@ class Crypter:
             most_affected = max([len(s) for s in self._table.values()])
             for rank in range(most_affected):
                 for letter in ALPHABET:
-                    if letter in PLAIN.clear_content:
+                    if letter in PLAIN.plain_letters:
                         ciphers = sorted(self._table[letter])
                         if rank < len(ciphers):
                             cipher = ciphers[rank]
@@ -151,7 +182,7 @@ class Crypter:
             print("-" * len(ALPHABET))
             print(''.join(ALPHABET))
             for letter in ALPHABET:
-                if letter in PLAIN.clear_content:
+                if letter in PLAIN.plain_letters:
                     size = len(self._table[letter])
                     if size:
                         print(size, end='')
@@ -172,7 +203,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument('-p', '--plain_input', required=True, help='input file with plain (can have spaces within - will be removed - can have accents - will be corrected)')
     parser.add_argument('-c', '--cipher_input', required=True, help='input file with cipher')
-    parser.add_argument('-K', '--key_dump', required=True, help='dump crypter key to file')
+    parser.add_argument('-K', '--key_dump', required=False, help='dump crypter key to file')
     parser.add_argument('-H', '--hint_dump', required=False, help='dump crypter hint to file')
     args = parser.parse_args()
 
@@ -180,15 +211,15 @@ def main() -> None:
     plain_input_file = args.plain_input
     global PLAIN
     PLAIN = Plain(plain_input_file)
-    print("Plain:")
-    print(PLAIN)
+    #  print("Plain:")
+    #  print(PLAIN)
 
     # load cipher
     cipĥer_input_file = args.cipher_input
     global CIPHER
     CIPHER = Cipher(cipĥer_input_file)
-    print("Cipher:")
-    print(CIPHER)
+    #  print("Cipher:")
+    #  print(CIPHER)
 
     # make correspondance
     global CRYPTER
