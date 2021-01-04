@@ -42,6 +42,19 @@ K_CIPHER_DIFFICULTY = 50.
 MIN_ATTACKER_CLIMBS = 10
 MAX_ATTACKER_CLIMBS = 100
 
+REF_IC = 0.
+
+
+def load_reference_coincidence_index(filename: str) -> None:
+    """ Loads IC from file """
+    with open(filename) as filepointer:
+        for line in filepointer:
+            line = line.rstrip('\n')
+            global REF_IC
+            REF_IC = float(line)
+            print(f"INFORMATION  :reference IC is {REF_IC}")
+            return
+
 
 class Letters:
     """ Says the frequency of letters """
@@ -254,6 +267,9 @@ class Cipher:
         # set of all n_grams in cipher
         self._n_grams_set = set(cipher_n_grams)
 
+        # a table where how many times code appear in cipher
+        self._codes_number_occurence_table = collections.Counter(self._cipher_str)
+
         # a table where how many times n_grams appear in cipher
         self._n_grams_number_occurence_table = collections.Counter(cipher_n_grams)
 
@@ -290,6 +306,11 @@ class Cipher:
     def n_grams_number_occurence_table(self) -> typing.Counter[str]:
         """ property """
         return self._n_grams_number_occurence_table
+
+    @property
+    def codes_number_occurence_table(self) -> typing.Counter[str]:
+        """ property """
+        return self._codes_number_occurence_table
 
     @property
     def n_grams_localization_table(self) -> typing.Dict[str, typing.List[str]]:
@@ -554,7 +575,11 @@ class Attacker:
         # a table for remembering frequencies
         self._n_grams_frequency_quality_table: typing.Dict[str, float] = dict()
 
+        # a table for remembering nb occurences plain
+        self._nb_occ_plain: typing.Dict[str, int] = collections.defaultdict(int)
+
         self._overall_n_grams_frequency_quality = 0.
+        self._overall_coincidence_index_quality = 0
 
         if substitution_mode:
             self._number_climbs = MAX_ATTACKER_CLIMBS
@@ -581,7 +606,22 @@ class Attacker:
             n_gram = plain[position: position + NGRAMS.size]
             qcheck += NGRAMS.log_freq_table.get(n_gram, NGRAMS.worst_frequency)
 
-        assert abs(qcheck - self._overall_n_grams_frequency_quality) < EPSILON_DELTA_FLOAT, "Debug mode detected an error"
+        assert abs(qcheck - self._overall_n_grams_frequency_quality) < EPSILON_DELTA_FLOAT, "Debug mode detected an error for N-Gram freq"
+
+    def _check_index_coincidence_quality(self) -> None:
+        """ Evaluates quality from index coincidence DEBUG """
+
+        assert DEBUG
+
+        assert DECRYPTER is not None
+
+        # debug check
+        plain = DECRYPTER.apply()
+        assert all([plain.count(ll) == self._nb_occ_plain[ll] for ll in set(plain)])
+
+        qcheck = sum([self._nb_occ_plain[p] * (self._nb_occ_plain[p] - 1) for p in self._nb_occ_plain])
+
+        assert qcheck == self._overall_coincidence_index_quality, "Debug mode detected an error for IC"
 
     def _swap(self, cipher1: str, cipher2: str) -> None:
         """ swap: this is where most CPU time is spent in the program """
@@ -589,6 +629,12 @@ class Attacker:
         assert NGRAMS is not None
         assert CIPHER is not None
         assert DECRYPTER is not None
+
+        # IC obliterated
+        for cipher in cipher1, cipher2:
+            plain = DECRYPTER.decode_some(cipher)
+            self._overall_coincidence_index_quality -= self._nb_occ_plain[plain] * (self._nb_occ_plain[plain] - 1)
+            self._nb_occ_plain[plain] -= CIPHER.codes_number_occurence_table[cipher]
 
         DECRYPTER.swap(cipher1, cipher2)
 
@@ -612,20 +658,26 @@ class Attacker:
                 # summed
                 self._overall_n_grams_frequency_quality += new_value
 
+        # IC new
+        for cipher in cipher1, cipher2:
+            plain = DECRYPTER.decode_some(cipher)
+            self._nb_occ_plain[plain] += CIPHER.codes_number_occurence_table[cipher]
+            self._overall_coincidence_index_quality += self._nb_occ_plain[plain] * (self._nb_occ_plain[plain] - 1)
+
     def _go_up(self) -> bool:
         """ go up : try to improve things... """
 
         assert CIPHER is not None
         assert DECRYPTER is not None
 
-        neighbours = {(p1, p2, c1, c2) for (p1,p2) in itertools.combinations(DECRYPTER.allocated, 2) for c1 in DECRYPTER.reverse_table[p1] for c2 in DECRYPTER.reverse_table[p2]}
+        neighbours = {(c1, c2) for (p1, p2) in itertools.combinations(DECRYPTER.allocated, 2) for c1 in DECRYPTER.reverse_table[p1] for c2 in DECRYPTER.reverse_table[p2]}
 
         while True:
 
             # take a random neighbour
             neighbour = secrets.choice(list(neighbours))
             neighbours.remove(neighbour)
-            plain1, plain2, cipher1, cipher2 = neighbour
+            cipher1, cipher2 = neighbour
 
             # -----------------------
             #  does the change improve things ?
@@ -633,6 +685,7 @@ class Attacker:
 
             # keep a note of quality before change
             old_overall_n_grams_frequency_quality = self._overall_n_grams_frequency_quality
+            old_overall_coincidence_index_quality = self._overall_coincidence_index_quality
 
             # apply change now
             self._swap(cipher1, cipher2)
@@ -643,6 +696,7 @@ class Attacker:
 
             if DEBUG:
                 self._check_n_gram_frequency_quality()
+                self._check_index_coincidence_quality()
 
             # did the quality improve ?
             if self._overall_n_grams_frequency_quality > old_overall_n_grams_frequency_quality:
@@ -657,9 +711,11 @@ class Attacker:
 
             if DEBUG:
                 self._check_n_gram_frequency_quality()
+                self._check_index_coincidence_quality()
 
             # restore value
             self._overall_n_grams_frequency_quality = old_overall_n_grams_frequency_quality
+            self._overall_coincidence_index_quality = old_overall_coincidence_index_quality
 
     def _climb(self) -> None:
         """ climb : keeps going up until fails to do so """
@@ -695,12 +751,20 @@ class Attacker:
         # summed
         self._overall_n_grams_frequency_quality = sum(self._n_grams_frequency_quality_table.values())
 
+        # IC
+        self._nb_occ_plain.clear()
+        for cipher in CIPHER.cipher_codes:
+            plain = DECRYPTER.decode_some(cipher)
+            self._nb_occ_plain[plain] += CIPHER.codes_number_occurence_table[cipher]
+        self._overall_coincidence_index_quality = sum([self._nb_occ_plain[p] * (self._nb_occ_plain[p] - 1) for p in self._nb_occ_plain])
+
     def make_tries(self) -> float:
         """ make tries : this includes  random generator and inner hill climb """
 
         assert ALLOCATOR is not None
         assert DECRYPTER is not None
         assert DICTIONARY is not None
+        assert CIPHER is not None
 
         # records best quality reached
         best_n_gram_quality_reached: typing.Optional[float] = None
@@ -725,8 +789,9 @@ class Attacker:
                 # beaten local, show stuff if also beaten global
                 if BEST_NGRAM_QUALITY_REACHED is None or self._overall_n_grams_frequency_quality > BEST_NGRAM_QUALITY_REACHED:
                     allocation = DECRYPTER.allocation()
-                    quality_reached = self._overall_n_grams_frequency_quality
-                    solution = Solution(allocation, quality_reached)
+                    quality_ngrams_reached = self._overall_n_grams_frequency_quality
+                    quality_coincidence_reached = - abs(len(ALPHABET) * self._overall_coincidence_index_quality / (len(CIPHER.cipher_str) * (len(CIPHER.cipher_str) - 1)) - REF_IC)
+                    solution = Solution(allocation, quality_ngrams_reached, quality_coincidence_reached)
                     solution.show()
 
                 best_n_gram_quality_reached = self._overall_n_grams_frequency_quality
@@ -749,10 +814,11 @@ ATTACKER: typing.Optional[Attacker] = None
 class Solution:
     """ A solution """
 
-    def __init__(self, allocation: typing.Dict[str, str], n_grams_frequency_quality: float) -> None:
+    def __init__(self, allocation: typing.Dict[str, str], n_grams_frequency_quality: float, coincidence_index_quality: float, ) -> None:
 
         self._allocation = copy.copy(allocation)
         self._n_grams_frequency_quality = n_grams_frequency_quality
+        self._coincidence_index_quality = coincidence_index_quality
 
     def show(self) -> None:
         """ show solution """
@@ -771,6 +837,7 @@ class Solution:
         speed = N_OPERATIONS / (now - BEFORE)
         print(f"{speed=}")
         print(f"N-gram quality={self._n_grams_frequency_quality}")
+        print(f"IC quality={self._coincidence_index_quality}")
         my_decrypter.print_key(sys.stdout)
 
 
@@ -778,6 +845,7 @@ def main() -> None:
     """ main """
 
     parser = argparse.ArgumentParser()
+    parser.add_argument('-i', '--ic', required=True, help='input a file with index coincidence for language')
     parser.add_argument('-n', '--ngrams', required=True, help='input a file with frequency table for n_grams (n-letters)')
     parser.add_argument('-d', '--dictionary', required=True, help='input a file with frequency table for words (dictionary) to use')
     parser.add_argument('-L', '--limit', required=False, help='limit for the dictionary words to use')
@@ -786,6 +854,9 @@ def main() -> None:
     parser.add_argument('-H', '--hint_file', required=False, help='file with hint (sizes of buckets) in cipher')
     parser.add_argument('-s', '--substitution_mode', required=False, help='cipher is simple substitution (not homophonic)', action='store_true')
     args = parser.parse_args()
+
+    ref_ic_file = args.ic
+    load_reference_coincidence_index(ref_ic_file)
 
     letters_file = args.letters
     global LETTERS
