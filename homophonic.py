@@ -97,14 +97,15 @@ class Ngrams:
         with open(filename) as filepointer:
             for line in filepointer:
                 line = line.rstrip('\n')
-                n_gramgram_read, frequency_str = line.split()
-                n_gramgram = n_gramgram_read.lower()
+                n_gram_read, frequency_str = line.split()
+                n_gram = n_gram_read.lower()
                 if self._size:
-                    assert len(n_gramgram) == self._size, "Problem with ngram file content"
+                    assert len(n_gram) == self._size, "Problem with ngram file content"
                 else:
-                    self._size = len(n_gramgram)
+                    self._size = len(n_gram)
+                    print(f"Using N-Grams with N={self._size}")
                 frequency = int(frequency_str)
-                raw_frequency_table[n_gramgram] = frequency
+                raw_frequency_table[n_gram] = frequency
 
         coverage = (len(raw_frequency_table) / (len(ALPHABET) ** self._size)) * 100
         print(f"INFORMATION: Frequency tables covers {coverage:.2f}% of possibilities")
@@ -770,7 +771,7 @@ class Solution:
         now = time.time()
         speed = N_OPERATIONS / (now - BEFORE)
         print(f"{speed=}")
-        print(f"Quadgram quality={self._n_gramgrams_frequency_quality=}")
+        print(f"N-gram quality={self._n_gramgrams_frequency_quality}")
         my_decrypter.print_key(sys.stdout)
 
 
