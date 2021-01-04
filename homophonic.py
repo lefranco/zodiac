@@ -547,7 +547,7 @@ BEST_NGRAM_QUALITY_REACHED: typing.Optional[float] = None
 class Attacker:
     """ Attacker """
 
-    def __init__(self) -> None:
+    def __init__(self, substitution_mode: bool) -> None:
 
         assert CIPHER is not None
 
@@ -556,10 +556,13 @@ class Attacker:
 
         self._overall_n_grams_frequency_quality = 0.
 
-        # number of climbs = cipher difficulty
-        self._number_climbs = CIPHER.difficulty()
-        self._number_climbs = min(MAX_ATTACKER_CLIMBS, self._number_climbs)
-        self._number_climbs = max(MIN_ATTACKER_CLIMBS, self._number_climbs)
+        if substitution_mode:
+            self._number_climbs = MAX_ATTACKER_CLIMBS
+        else:
+            # number of climbs = cipher difficulty
+            self._number_climbs = CIPHER.difficulty()
+            self._number_climbs = min(MAX_ATTACKER_CLIMBS, self._number_climbs)
+            self._number_climbs = max(MIN_ATTACKER_CLIMBS, self._number_climbs)
 
         print(f"INFORMATION: Inner hill climb will use max={self._number_climbs}")
 
@@ -825,7 +828,7 @@ def main() -> None:
     #  print(f"Allocator='{ALLOCATOR}'")
 
     global ATTACKER
-    ATTACKER = Attacker()
+    ATTACKER = Attacker(substitution_mode)
 
     # outer hill climb
     while True:
