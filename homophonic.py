@@ -16,6 +16,7 @@ import collections
 import typing
 import math
 import functools
+import itertools
 import copy
 import contextlib
 import pprint
@@ -32,7 +33,6 @@ RECURSION_LIMIT = 1500  # default is 1000
 ALPHABET = [chr(i) for i in range(ord('a'), ord('z') + 1)]  # plain always lower case
 EPSILON_NO_OCCURENCES = 1e-99  # zero has - infinite as log, must be << 1
 EPSILON_DELTA_FLOAT = 0.000001  # to compare floats
-EPSILON_PROBA = 1 / 20  # 95% = to make sure we can give up searching
 
 MAX_SUBSTITUTION_STUFFING = 10
 MAX_BUCKET_CHANGE_ATTEMPTS = 5
@@ -609,23 +609,21 @@ class Attacker:
                 # summed
                 self._overall_n_grams_frequency_quality += new_value
 
+    @profile
     def _go_up(self) -> bool:
         """ go up : try to improve things... """
 
         assert CIPHER is not None
         assert DECRYPTER is not None
 
-        # how many attempts before giving up ?
-        number = len(DECRYPTER.allocated) * (len(DECRYPTER.allocated) - 1)
-        attempts = int(math.log(EPSILON_PROBA) / math.log((number - 1) / number))
+        neighbours = {(p1, p2, c1, c2) for (p1,p2) in itertools.combinations(DECRYPTER.allocated, 2) for c1 in DECRYPTER.reverse_table[p1] for c2 in DECRYPTER.reverse_table[p2]}
 
         while True:
 
-            plain1 = secrets.choice(list(DECRYPTER.allocated))
-            plain2 = secrets.choice(sorted(set(DECRYPTER.allocated) - set([plain1])))
-
-            cipher1 = secrets.choice(list(DECRYPTER.reverse_table[plain1]))
-            cipher2 = secrets.choice(list(DECRYPTER.reverse_table[plain2]))
+            # take a random neighbour
+            neighbour = secrets.choice(list(neighbours))
+            neighbours.remove(neighbour)
+            plain1, plain2, cipher1, cipher2 = neighbour
 
             # -----------------------
             #  does the change improve things ?
@@ -652,8 +650,7 @@ class Attacker:
             # no improvement so undo
             self._swap(cipher1, cipher2)
 
-            attempts -= 1
-            if attempts == 0:
+            if not neighbours:
                 return False
 
             if DEBUG:
