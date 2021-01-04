@@ -609,7 +609,6 @@ class Attacker:
                 # summed
                 self._overall_n_grams_frequency_quality += new_value
 
-    @profile
     def _go_up(self) -> bool:
         """ go up : try to improve things... """
 
