@@ -97,14 +97,14 @@ class Ngrams:
         with open(filename) as filepointer:
             for line in filepointer:
                 line = line.rstrip('\n')
-                quadgram_read, frequency_str = line.split()
-                quadgram = quadgram_read.lower()
+                n_gramgram_read, frequency_str = line.split()
+                n_gramgram = n_gramgram_read.lower()
                 if self._size:
-                    assert len(quadgram) == self._size, "Problem with ngram file content"
+                    assert len(n_gramgram) == self._size, "Problem with ngram file content"
                 else:
-                    self._size = len(quadgram)
+                    self._size = len(n_gramgram)
                 frequency = int(frequency_str)
-                raw_frequency_table[quadgram] = frequency
+                raw_frequency_table[n_gramgram] = frequency
 
         coverage = (len(raw_frequency_table) / (len(ALPHABET) ** self._size)) * 100
         print(f"INFORMATION: Frequency tables covers {coverage:.2f}% of possibilities")
@@ -247,20 +247,20 @@ class Cipher:
         # the different codes in cipher
         self._cipher_codes = ''.join(sorted(set(self._content)))
 
-        # list of cipher quadgrams with duplications
-        cipher_quadgrams = [self._cipher_str[p: p + NGRAMS.size] for p in range(len(self._cipher_str) - (NGRAMS.size - 1))]
+        # list of cipher n_gramgrams with duplications
+        cipher_n_gramgrams = [self._cipher_str[p: p + NGRAMS.size] for p in range(len(self._cipher_str) - (NGRAMS.size - 1))]
 
-        # set of all quadgrams in cipher
-        self._quadgrams_set = set(cipher_quadgrams)
+        # set of all n_gramgrams in cipher
+        self._n_gramgrams_set = set(cipher_n_gramgrams)
 
-        # a table where how many times quadgrams appear in cipher
-        self._quadgrams_number_occurence_table = collections.Counter(cipher_quadgrams)
+        # a table where how many times n_gramgrams appear in cipher
+        self._n_gramgrams_number_occurence_table = collections.Counter(cipher_n_gramgrams)
 
-        # a table from a cipher to quadgrams that contain it
-        self._quadgrams_localization_table: typing.Dict[str, typing.List[str]] = collections.defaultdict(list)
-        for quadgram in self._quadgrams_set:
-            for code in quadgram:
-                self._quadgrams_localization_table[code].append(quadgram)
+        # a table from a cipher to n_gramgrams that contain it
+        self._n_gramgrams_localization_table: typing.Dict[str, typing.List[str]] = collections.defaultdict(list)
+        for n_gramgram in self._n_gramgrams_set:
+            for code in n_gramgram:
+                self._n_gramgrams_localization_table[code].append(n_gramgram)
 
     def difficulty(self) -> int:
         """ climb_difficulty """
@@ -281,19 +281,19 @@ class Cipher:
         return self._cipher_str
 
     @property
-    def quadgrams_set(self) -> typing.Set[str]:
+    def n_gramgrams_set(self) -> typing.Set[str]:
         """ property """
-        return self._quadgrams_set
+        return self._n_gramgrams_set
 
     @property
-    def quadgrams_number_occurence_table(self) -> typing.Counter[str]:
+    def n_gramgrams_number_occurence_table(self) -> typing.Counter[str]:
         """ property """
-        return self._quadgrams_number_occurence_table
+        return self._n_gramgrams_number_occurence_table
 
     @property
-    def quadgrams_localization_table(self) -> typing.Dict[str, typing.List[str]]:
+    def n_gramgrams_localization_table(self) -> typing.Dict[str, typing.List[str]]:
         """ property """
-        return self._quadgrams_localization_table
+        return self._n_gramgrams_localization_table
 
     def __str__(self) -> str:
         return self._cipher_str
@@ -540,7 +540,7 @@ class Allocator:
 
 ALLOCATOR: typing.Optional[Allocator] = None
 N_OPERATIONS = 0
-BEST_QUADGRAM_QUALITY_REACHED: typing.Optional[float] = None
+BEST_NGRAM_QUALITY_REACHED: typing.Optional[float] = None
 
 
 class Attacker:
@@ -551,9 +551,9 @@ class Attacker:
         assert CIPHER is not None
 
         # a table for remembering frequencies
-        self._quadgrams_frequency_quality_table: typing.Dict[str, float] = dict()
+        self._n_gramgrams_frequency_quality_table: typing.Dict[str, float] = dict()
 
-        self._overall_quadgrams_frequency_quality = 0.
+        self._overall_n_gramgrams_frequency_quality = 0.
 
         # number of climbs = cipher difficulty
         self._number_climbs = CIPHER.difficulty()
@@ -562,8 +562,8 @@ class Attacker:
 
         print(f"INFORMATION: Inner hill climb will use max={self._number_climbs}")
 
-    def _check_quadgram_frequency_quality(self) -> None:
-        """ Evaluates quality from quadgram frequency DEBUG """
+    def _check_n_gramgram_frequency_quality(self) -> None:
+        """ Evaluates quality from n_gramgram frequency DEBUG """
 
         assert DEBUG
 
@@ -574,10 +574,10 @@ class Attacker:
         qcheck = 0.
         plain = DECRYPTER.apply()
         for position in range(len(plain) - NGRAMS.size + 1):
-            quadgram = plain[position: position + NGRAMS.size]
-            qcheck += NGRAMS.log_freq_table.get(quadgram, NGRAMS.worst_frequency)
+            n_gramgram = plain[position: position + NGRAMS.size]
+            qcheck += NGRAMS.log_freq_table.get(n_gramgram, NGRAMS.worst_frequency)
 
-        assert abs(qcheck - self._overall_quadgrams_frequency_quality) < EPSILON_DELTA_FLOAT, "Debug mode detected an error"
+        assert abs(qcheck - self._overall_n_gramgrams_frequency_quality) < EPSILON_DELTA_FLOAT, "Debug mode detected an error"
 
     def _swap(self, cipher1: str, cipher2: str) -> None:
         """ swap: this is where most CPU time is spent in the program """
@@ -591,22 +591,22 @@ class Attacker:
         # effect
 
         for cipher in cipher1, cipher2:
-            for quadgram in CIPHER.quadgrams_localization_table[cipher]:
+            for n_gramgram in CIPHER.n_gramgrams_localization_table[cipher]:
 
                 # value obliterated
-                self._overall_quadgrams_frequency_quality -= self._quadgrams_frequency_quality_table[quadgram]
+                self._overall_n_gramgrams_frequency_quality -= self._n_gramgrams_frequency_quality_table[n_gramgram]
 
                 # new plain
-                plain = DECRYPTER.decode_some(quadgram)
+                plain = DECRYPTER.decode_some(n_gramgram)
 
                 # new value
-                new_value = NGRAMS.log_freq_table.get(plain, NGRAMS.worst_frequency) * CIPHER.quadgrams_number_occurence_table[quadgram]
+                new_value = NGRAMS.log_freq_table.get(plain, NGRAMS.worst_frequency) * CIPHER.n_gramgrams_number_occurence_table[n_gramgram]
 
                 # remembered
-                self._quadgrams_frequency_quality_table[quadgram] = new_value
+                self._n_gramgrams_frequency_quality_table[n_gramgram] = new_value
 
                 # summed
-                self._overall_quadgrams_frequency_quality += new_value
+                self._overall_n_gramgrams_frequency_quality += new_value
 
     def _go_up(self) -> bool:
         """ go up : try to improve things... """
@@ -631,7 +631,7 @@ class Attacker:
             # -----------------------
 
             # keep a note of quality before change
-            old_overall_quadgrams_frequency_quality = self._overall_quadgrams_frequency_quality
+            old_overall_n_gramgrams_frequency_quality = self._overall_n_gramgrams_frequency_quality
 
             # apply change now
             self._swap(cipher1, cipher2)
@@ -641,10 +641,10 @@ class Attacker:
             N_OPERATIONS += 1
 
             if DEBUG:
-                self._check_quadgram_frequency_quality()
+                self._check_n_gramgram_frequency_quality()
 
             # did the quality improve ?
-            if self._overall_quadgrams_frequency_quality > old_overall_quadgrams_frequency_quality:
+            if self._overall_n_gramgrams_frequency_quality > old_overall_n_gramgrams_frequency_quality:
                 # yes : stop looping : we have improved
                 return True
 
@@ -656,10 +656,10 @@ class Attacker:
                 return False
 
             if DEBUG:
-                self._check_quadgram_frequency_quality()
+                self._check_n_gramgram_frequency_quality()
 
             # restore value
-            self._overall_quadgrams_frequency_quality = old_overall_quadgrams_frequency_quality
+            self._overall_n_gramgrams_frequency_quality = old_overall_n_gramgrams_frequency_quality
 
     def _climb(self) -> None:
         """ climb : keeps going up until fails to do so """
@@ -680,20 +680,20 @@ class Attacker:
         assert DECRYPTER is not None
         assert NGRAMS is not None
 
-        self._quadgrams_frequency_quality_table.clear()
+        self._n_gramgrams_frequency_quality_table.clear()
 
-        # quadgram frequency quality table
-        for quadgram in CIPHER.quadgrams_set:
+        # n_gramgram frequency quality table
+        for n_gramgram in CIPHER.n_gramgrams_set:
 
             # plain
-            plain = DECRYPTER.decode_some(quadgram)
+            plain = DECRYPTER.decode_some(n_gramgram)
 
             # remembered
-            self._quadgrams_frequency_quality_table[quadgram] = NGRAMS.log_freq_table.get(plain, NGRAMS.worst_frequency) * CIPHER.quadgrams_number_occurence_table[quadgram]
+            self._n_gramgrams_frequency_quality_table[n_gramgram] = NGRAMS.log_freq_table.get(plain, NGRAMS.worst_frequency) * CIPHER.n_gramgrams_number_occurence_table[n_gramgram]
 
-        # quadgram overall frequency quality of cipher
+        # n_gramgram overall frequency quality of cipher
         # summed
-        self._overall_quadgrams_frequency_quality = sum(self._quadgrams_frequency_quality_table.values())
+        self._overall_n_gramgrams_frequency_quality = sum(self._n_gramgrams_frequency_quality_table.values())
 
     def make_tries(self) -> float:
         """ make tries : this includes  random generator and inner hill climb """
@@ -703,7 +703,7 @@ class Attacker:
         assert DICTIONARY is not None
 
         # records best quality reached
-        best_quadgram_quality_reached: typing.Optional[float] = None
+        best_n_gramgram_quality_reached: typing.Optional[float] = None
 
         # limit the number of climbs
         number_climbs_left = self._number_climbs
@@ -720,27 +720,27 @@ class Attacker:
             self._climb()
 
             # handle local best quality
-            if best_quadgram_quality_reached is None or self._overall_quadgrams_frequency_quality > best_quadgram_quality_reached:
+            if best_n_gramgram_quality_reached is None or self._overall_n_gramgrams_frequency_quality > best_n_gramgram_quality_reached:
 
                 # beaten local, show stuff if also beaten global
-                if BEST_QUADGRAM_QUALITY_REACHED is None or self._overall_quadgrams_frequency_quality > BEST_QUADGRAM_QUALITY_REACHED:
+                if BEST_NGRAM_QUALITY_REACHED is None or self._overall_n_gramgrams_frequency_quality > BEST_NGRAM_QUALITY_REACHED:
                     allocation = DECRYPTER.allocation()
-                    quality_reached = self._overall_quadgrams_frequency_quality
+                    quality_reached = self._overall_n_gramgrams_frequency_quality
                     solution = Solution(allocation, quality_reached)
                     solution.show()
 
-                best_quadgram_quality_reached = self._overall_quadgrams_frequency_quality
+                best_n_gramgram_quality_reached = self._overall_n_gramgrams_frequency_quality
                 number_climbs_left = self._number_climbs
 
             # stop at some point inner hill climb
             number_climbs_left -= 1
             if not number_climbs_left:
-                return best_quadgram_quality_reached
+                return best_n_gramgram_quality_reached
 
     @property
-    def overall_quadgrams_frequency_quality(self) -> float:
+    def overall_n_gramgrams_frequency_quality(self) -> float:
         """ property """
-        return self._overall_quadgrams_frequency_quality
+        return self._overall_n_gramgrams_frequency_quality
 
 
 ATTACKER: typing.Optional[Attacker] = None
@@ -749,10 +749,10 @@ ATTACKER: typing.Optional[Attacker] = None
 class Solution:
     """ A solution """
 
-    def __init__(self, allocation: typing.Dict[str, str], quadgrams_frequency_quality: float) -> None:
+    def __init__(self, allocation: typing.Dict[str, str], n_gramgrams_frequency_quality: float) -> None:
 
         self._allocation = copy.copy(allocation)
-        self._quadgrams_frequency_quality = quadgrams_frequency_quality
+        self._n_gramgrams_frequency_quality = n_gramgrams_frequency_quality
 
     def show(self) -> None:
         """ show solution """
@@ -770,7 +770,7 @@ class Solution:
         now = time.time()
         speed = N_OPERATIONS / (now - BEFORE)
         print(f"{speed=}")
-        print(f"Quadgram quality={self._quadgrams_frequency_quality=}")
+        print(f"Quadgram quality={self._n_gramgrams_frequency_quality=}")
         my_decrypter.print_key(sys.stdout)
 
 
@@ -778,7 +778,7 @@ def main() -> None:
     """ main """
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('-n', '--ngrams', required=True, help='input a file with frequency table for quadgrams (n-letters)')
+    parser.add_argument('-n', '--ngrams', required=True, help='input a file with frequency table for n_gramgrams (n-letters)')
     parser.add_argument('-d', '--dictionary', required=True, help='input a file with frequency table for words (dictionary) to use')
     parser.add_argument('-L', '--limit', required=False, help='limit for the dictionary words to use')
     parser.add_argument('-l', '--letters', required=True, help='input a file with frequency table for letters')
@@ -839,9 +839,9 @@ def main() -> None:
         if substitution_mode or hint_file is not None:
             break
 
-        global BEST_QUADGRAM_QUALITY_REACHED
-        if BEST_QUADGRAM_QUALITY_REACHED is None or quality_reached > BEST_QUADGRAM_QUALITY_REACHED:
-            BEST_QUADGRAM_QUALITY_REACHED = quality_reached
+        global BEST_NGRAM_QUALITY_REACHED
+        if BEST_NGRAM_QUALITY_REACHED is None or quality_reached > BEST_NGRAM_QUALITY_REACHED:
+            BEST_NGRAM_QUALITY_REACHED = quality_reached
 
         # remember this bucket as done
         BUCKET.remember()
