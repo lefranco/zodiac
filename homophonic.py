@@ -103,7 +103,7 @@ class Ngrams:
                     assert len(n_gram) == self._size, "Problem with ngram file content"
                 else:
                     self._size = len(n_gram)
-                    print(f"Using N-Grams with N={self._size}")
+                    print(f"INFORMATION: Using N-Grams with N={self._size}")
                 frequency = int(frequency_str)
                 raw_frequency_table[n_gram] = frequency
 
@@ -248,20 +248,20 @@ class Cipher:
         # the different codes in cipher
         self._cipher_codes = ''.join(sorted(set(self._content)))
 
-        # list of cipher n_gramgrams with duplications
-        cipher_n_gramgrams = [self._cipher_str[p: p + NGRAMS.size] for p in range(len(self._cipher_str) - (NGRAMS.size - 1))]
+        # list of cipher n_grams with duplications
+        cipher_n_grams = [self._cipher_str[p: p + NGRAMS.size] for p in range(len(self._cipher_str) - (NGRAMS.size - 1))]
 
-        # set of all n_gramgrams in cipher
-        self._n_gramgrams_set = set(cipher_n_gramgrams)
+        # set of all n_grams in cipher
+        self._n_grams_set = set(cipher_n_grams)
 
-        # a table where how many times n_gramgrams appear in cipher
-        self._n_gramgrams_number_occurence_table = collections.Counter(cipher_n_gramgrams)
+        # a table where how many times n_grams appear in cipher
+        self._n_grams_number_occurence_table = collections.Counter(cipher_n_grams)
 
-        # a table from a cipher to n_gramgrams that contain it
-        self._n_gramgrams_localization_table: typing.Dict[str, typing.List[str]] = collections.defaultdict(list)
-        for n_gramgram in self._n_gramgrams_set:
-            for code in n_gramgram:
-                self._n_gramgrams_localization_table[code].append(n_gramgram)
+        # a table from a cipher to n_grams that contain it
+        self._n_grams_localization_table: typing.Dict[str, typing.List[str]] = collections.defaultdict(list)
+        for n_gram in self._n_grams_set:
+            for code in n_gram:
+                self._n_grams_localization_table[code].append(n_gram)
 
     def difficulty(self) -> int:
         """ climb_difficulty """
@@ -282,19 +282,19 @@ class Cipher:
         return self._cipher_str
 
     @property
-    def n_gramgrams_set(self) -> typing.Set[str]:
+    def n_grams_set(self) -> typing.Set[str]:
         """ property """
-        return self._n_gramgrams_set
+        return self._n_grams_set
 
     @property
-    def n_gramgrams_number_occurence_table(self) -> typing.Counter[str]:
+    def n_grams_number_occurence_table(self) -> typing.Counter[str]:
         """ property """
-        return self._n_gramgrams_number_occurence_table
+        return self._n_grams_number_occurence_table
 
     @property
-    def n_gramgrams_localization_table(self) -> typing.Dict[str, typing.List[str]]:
+    def n_grams_localization_table(self) -> typing.Dict[str, typing.List[str]]:
         """ property """
-        return self._n_gramgrams_localization_table
+        return self._n_grams_localization_table
 
     def __str__(self) -> str:
         return self._cipher_str
@@ -552,9 +552,9 @@ class Attacker:
         assert CIPHER is not None
 
         # a table for remembering frequencies
-        self._n_gramgrams_frequency_quality_table: typing.Dict[str, float] = dict()
+        self._n_grams_frequency_quality_table: typing.Dict[str, float] = dict()
 
-        self._overall_n_gramgrams_frequency_quality = 0.
+        self._overall_n_grams_frequency_quality = 0.
 
         # number of climbs = cipher difficulty
         self._number_climbs = CIPHER.difficulty()
@@ -563,8 +563,8 @@ class Attacker:
 
         print(f"INFORMATION: Inner hill climb will use max={self._number_climbs}")
 
-    def _check_n_gramgram_frequency_quality(self) -> None:
-        """ Evaluates quality from n_gramgram frequency DEBUG """
+    def _check_n_gram_frequency_quality(self) -> None:
+        """ Evaluates quality from n_gram frequency DEBUG """
 
         assert DEBUG
 
@@ -575,10 +575,10 @@ class Attacker:
         qcheck = 0.
         plain = DECRYPTER.apply()
         for position in range(len(plain) - NGRAMS.size + 1):
-            n_gramgram = plain[position: position + NGRAMS.size]
-            qcheck += NGRAMS.log_freq_table.get(n_gramgram, NGRAMS.worst_frequency)
+            n_gram = plain[position: position + NGRAMS.size]
+            qcheck += NGRAMS.log_freq_table.get(n_gram, NGRAMS.worst_frequency)
 
-        assert abs(qcheck - self._overall_n_gramgrams_frequency_quality) < EPSILON_DELTA_FLOAT, "Debug mode detected an error"
+        assert abs(qcheck - self._overall_n_grams_frequency_quality) < EPSILON_DELTA_FLOAT, "Debug mode detected an error"
 
     def _swap(self, cipher1: str, cipher2: str) -> None:
         """ swap: this is where most CPU time is spent in the program """
@@ -592,22 +592,22 @@ class Attacker:
         # effect
 
         for cipher in cipher1, cipher2:
-            for n_gramgram in CIPHER.n_gramgrams_localization_table[cipher]:
+            for n_gram in CIPHER.n_grams_localization_table[cipher]:
 
                 # value obliterated
-                self._overall_n_gramgrams_frequency_quality -= self._n_gramgrams_frequency_quality_table[n_gramgram]
+                self._overall_n_grams_frequency_quality -= self._n_grams_frequency_quality_table[n_gram]
 
                 # new plain
-                plain = DECRYPTER.decode_some(n_gramgram)
+                plain = DECRYPTER.decode_some(n_gram)
 
                 # new value
-                new_value = NGRAMS.log_freq_table.get(plain, NGRAMS.worst_frequency) * CIPHER.n_gramgrams_number_occurence_table[n_gramgram]
+                new_value = NGRAMS.log_freq_table.get(plain, NGRAMS.worst_frequency) * CIPHER.n_grams_number_occurence_table[n_gram]
 
                 # remembered
-                self._n_gramgrams_frequency_quality_table[n_gramgram] = new_value
+                self._n_grams_frequency_quality_table[n_gram] = new_value
 
                 # summed
-                self._overall_n_gramgrams_frequency_quality += new_value
+                self._overall_n_grams_frequency_quality += new_value
 
     def _go_up(self) -> bool:
         """ go up : try to improve things... """
@@ -632,7 +632,7 @@ class Attacker:
             # -----------------------
 
             # keep a note of quality before change
-            old_overall_n_gramgrams_frequency_quality = self._overall_n_gramgrams_frequency_quality
+            old_overall_n_grams_frequency_quality = self._overall_n_grams_frequency_quality
 
             # apply change now
             self._swap(cipher1, cipher2)
@@ -642,10 +642,10 @@ class Attacker:
             N_OPERATIONS += 1
 
             if DEBUG:
-                self._check_n_gramgram_frequency_quality()
+                self._check_n_gram_frequency_quality()
 
             # did the quality improve ?
-            if self._overall_n_gramgrams_frequency_quality > old_overall_n_gramgrams_frequency_quality:
+            if self._overall_n_grams_frequency_quality > old_overall_n_grams_frequency_quality:
                 # yes : stop looping : we have improved
                 return True
 
@@ -657,10 +657,10 @@ class Attacker:
                 return False
 
             if DEBUG:
-                self._check_n_gramgram_frequency_quality()
+                self._check_n_gram_frequency_quality()
 
             # restore value
-            self._overall_n_gramgrams_frequency_quality = old_overall_n_gramgrams_frequency_quality
+            self._overall_n_grams_frequency_quality = old_overall_n_grams_frequency_quality
 
     def _climb(self) -> None:
         """ climb : keeps going up until fails to do so """
@@ -681,20 +681,20 @@ class Attacker:
         assert DECRYPTER is not None
         assert NGRAMS is not None
 
-        self._n_gramgrams_frequency_quality_table.clear()
+        self._n_grams_frequency_quality_table.clear()
 
-        # n_gramgram frequency quality table
-        for n_gramgram in CIPHER.n_gramgrams_set:
+        # n_gram frequency quality table
+        for n_gram in CIPHER.n_grams_set:
 
             # plain
-            plain = DECRYPTER.decode_some(n_gramgram)
+            plain = DECRYPTER.decode_some(n_gram)
 
             # remembered
-            self._n_gramgrams_frequency_quality_table[n_gramgram] = NGRAMS.log_freq_table.get(plain, NGRAMS.worst_frequency) * CIPHER.n_gramgrams_number_occurence_table[n_gramgram]
+            self._n_grams_frequency_quality_table[n_gram] = NGRAMS.log_freq_table.get(plain, NGRAMS.worst_frequency) * CIPHER.n_grams_number_occurence_table[n_gram]
 
-        # n_gramgram overall frequency quality of cipher
+        # n_gram overall frequency quality of cipher
         # summed
-        self._overall_n_gramgrams_frequency_quality = sum(self._n_gramgrams_frequency_quality_table.values())
+        self._overall_n_grams_frequency_quality = sum(self._n_grams_frequency_quality_table.values())
 
     def make_tries(self) -> float:
         """ make tries : this includes  random generator and inner hill climb """
@@ -704,7 +704,7 @@ class Attacker:
         assert DICTIONARY is not None
 
         # records best quality reached
-        best_n_gramgram_quality_reached: typing.Optional[float] = None
+        best_n_gram_quality_reached: typing.Optional[float] = None
 
         # limit the number of climbs
         number_climbs_left = self._number_climbs
@@ -721,27 +721,27 @@ class Attacker:
             self._climb()
 
             # handle local best quality
-            if best_n_gramgram_quality_reached is None or self._overall_n_gramgrams_frequency_quality > best_n_gramgram_quality_reached:
+            if best_n_gram_quality_reached is None or self._overall_n_grams_frequency_quality > best_n_gram_quality_reached:
 
                 # beaten local, show stuff if also beaten global
-                if BEST_NGRAM_QUALITY_REACHED is None or self._overall_n_gramgrams_frequency_quality > BEST_NGRAM_QUALITY_REACHED:
+                if BEST_NGRAM_QUALITY_REACHED is None or self._overall_n_grams_frequency_quality > BEST_NGRAM_QUALITY_REACHED:
                     allocation = DECRYPTER.allocation()
-                    quality_reached = self._overall_n_gramgrams_frequency_quality
+                    quality_reached = self._overall_n_grams_frequency_quality
                     solution = Solution(allocation, quality_reached)
                     solution.show()
 
-                best_n_gramgram_quality_reached = self._overall_n_gramgrams_frequency_quality
+                best_n_gram_quality_reached = self._overall_n_grams_frequency_quality
                 number_climbs_left = self._number_climbs
 
             # stop at some point inner hill climb
             number_climbs_left -= 1
             if not number_climbs_left:
-                return best_n_gramgram_quality_reached
+                return best_n_gram_quality_reached
 
     @property
-    def overall_n_gramgrams_frequency_quality(self) -> float:
+    def overall_n_grams_frequency_quality(self) -> float:
         """ property """
-        return self._overall_n_gramgrams_frequency_quality
+        return self._overall_n_grams_frequency_quality
 
 
 ATTACKER: typing.Optional[Attacker] = None
@@ -750,10 +750,10 @@ ATTACKER: typing.Optional[Attacker] = None
 class Solution:
     """ A solution """
 
-    def __init__(self, allocation: typing.Dict[str, str], n_gramgrams_frequency_quality: float) -> None:
+    def __init__(self, allocation: typing.Dict[str, str], n_grams_frequency_quality: float) -> None:
 
         self._allocation = copy.copy(allocation)
-        self._n_gramgrams_frequency_quality = n_gramgrams_frequency_quality
+        self._n_grams_frequency_quality = n_grams_frequency_quality
 
     def show(self) -> None:
         """ show solution """
@@ -771,7 +771,7 @@ class Solution:
         now = time.time()
         speed = N_OPERATIONS / (now - BEFORE)
         print(f"{speed=}")
-        print(f"N-gram quality={self._n_gramgrams_frequency_quality}")
+        print(f"N-gram quality={self._n_grams_frequency_quality}")
         my_decrypter.print_key(sys.stdout)
 
 
@@ -779,7 +779,7 @@ def main() -> None:
     """ main """
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('-n', '--ngrams', required=True, help='input a file with frequency table for n_gramgrams (n-letters)')
+    parser.add_argument('-n', '--ngrams', required=True, help='input a file with frequency table for n_grams (n-letters)')
     parser.add_argument('-d', '--dictionary', required=True, help='input a file with frequency table for words (dictionary) to use')
     parser.add_argument('-L', '--limit', required=False, help='limit for the dictionary words to use')
     parser.add_argument('-l', '--letters', required=True, help='input a file with frequency table for letters')
