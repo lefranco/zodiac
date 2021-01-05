@@ -42,17 +42,17 @@ K_CIPHER_DIFFICULTY = 50.
 MIN_ATTACKER_CLIMBS = 10
 MAX_ATTACKER_CLIMBS = 100
 
-REF_IC = 0.
+REF_IOC = 0.
 
 
 def load_reference_coincidence_index(filename: str) -> None:
-    """ Loads IC from file """
+    """ Loads IOC from file """
     with open(filename) as filepointer:
         for line in filepointer:
             line = line.rstrip('\n')
-            global REF_IC
-            REF_IC = float(line)
-            print(f"INFORMATION  :reference IC is {REF_IC}")
+            global REF_IOC
+            REF_IOC = float(line)
+            print(f"INFORMATION  :reference IOC is {REF_IOC}")
             return
 
 
@@ -583,14 +583,47 @@ class Evaluation:
 
     def __gt__(self, other: 'Evaluation') -> bool:
 
-        # TODO : at some point use the IC (using it alone lowers results a lot
+        # TODO : at some point use the IOC (using it alone lowers results a lot
         # but it should be prefered at begining of hill climbing when quality is bad
 
         return self._n_grams_frequency_quality > other.n_grams_frequency_quality
         #  return self._coincidence_index_quality > other.coincidence_index_quality
 
     def __str__(self) -> str:
-        return f"delta IC={self._coincidence_index_quality} ngram qual={self._n_grams_frequency_quality}"
+        return f"delta IOC={self._coincidence_index_quality} ngram qual={self._n_grams_frequency_quality}"
+
+
+class Solution:
+    """ A solution """
+
+    def __init__(self, allocation: typing.Dict[str, str], quality: Evaluation) -> None:
+
+        self._allocation = copy.copy(allocation)
+        self._quality = quality
+
+    def print_solution(self, file_handle: typing.TextIO) -> None:
+        """ show print_solution """
+
+        assert DICTIONARY is not None
+
+        # get speed
+        now = time.time()
+        speed = N_OPERATIONS / (now - BEFORE)
+
+        # get dictionary quality of result
+        my_decrypter = Decrypter()
+        my_decrypter.instantiate(self._allocation)
+        plain = my_decrypter.apply()
+        dictionary_quality, selected_words = DICTIONARY.extracted_words(plain)
+
+        # print stuff
+        print(f"{speed=}", file=file_handle)
+        print("=" * 50, file=file_handle)
+        print(' '.join(selected_words), file=file_handle)
+        print("=" * 50, file=file_handle)
+        print(f"{dictionary_quality=}", file=file_handle)
+        print(f"quality={self._quality}", file=file_handle)
+        my_decrypter.print_key(file_handle)
 
 
 BEST_QUALITY_REACHED: typing.Optional[Evaluation] = None
@@ -600,7 +633,7 @@ N_OPERATIONS = 0
 class Attacker:
     """ Attacker """
 
-    def __init__(self, substitution_mode: bool) -> None:
+    def __init__(self, solution_filename: str, substitution_mode: bool) -> None:
 
         assert CIPHER is not None
 
@@ -622,6 +655,8 @@ class Attacker:
             self._number_climbs = max(MIN_ATTACKER_CLIMBS, self._number_climbs)
 
         print(f"INFORMATION: Inner hill climb will use max={self._number_climbs}")
+
+        self._solution_filename = solution_filename
 
     def _check_n_gram_frequency_quality(self) -> None:
         """ Evaluates quality from n_gram frequency DEBUG """
@@ -653,7 +688,7 @@ class Attacker:
 
         qcheck = sum([self._nb_occ_plain[p] * (self._nb_occ_plain[p] - 1) for p in self._nb_occ_plain])
 
-        assert qcheck == self._overall_coincidence_index_quality, "Debug mode detected an error for IC"
+        assert qcheck == self._overall_coincidence_index_quality, "Debug mode detected an error for IOC"
 
     def _swap(self, cipher1: str, cipher2: str) -> None:
         """ swap: this is where most CPU time is spent in the program """
@@ -662,7 +697,7 @@ class Attacker:
         assert CIPHER is not None
         assert DECRYPTER is not None
 
-        # IC obliterated
+        # IOC obliterated
         for cipher in cipher1, cipher2:
             plain = DECRYPTER.decode_some(cipher)
             self._overall_coincidence_index_quality -= self._nb_occ_plain[plain] * (self._nb_occ_plain[plain] - 1)
@@ -690,7 +725,7 @@ class Attacker:
                 # summed
                 self._overall_n_grams_frequency_quality += new_value
 
-        # IC new
+        # new IOC
         for cipher in cipher1, cipher2:
             plain = DECRYPTER.decode_some(cipher)
             self._nb_occ_plain[plain] += CIPHER.codes_number_occurence_table[cipher]
@@ -783,7 +818,7 @@ class Attacker:
         # summed
         self._overall_n_grams_frequency_quality = sum(self._n_grams_frequency_quality_table.values())
 
-        # IC
+        # IOC
         self._nb_occ_plain.clear()
         for cipher in CIPHER.cipher_codes:
             plain = DECRYPTER.decode_some(cipher)
@@ -816,7 +851,7 @@ class Attacker:
             self._climb()
 
             quality_ngrams_reached = self._overall_n_grams_frequency_quality
-            quality_coincidence_reached = - abs(len(ALPHABET) * self._overall_coincidence_index_quality / (len(CIPHER.cipher_str) * (len(CIPHER.cipher_str) - 1)) - REF_IC)
+            quality_coincidence_reached = - abs(len(ALPHABET) * self._overall_coincidence_index_quality / (len(CIPHER.cipher_str) * (len(CIPHER.cipher_str) - 1)) - REF_IOC)
             quality_reached = Evaluation(quality_coincidence_reached, quality_ngrams_reached)
 
             # handle local best quality
@@ -826,7 +861,9 @@ class Attacker:
                 if BEST_QUALITY_REACHED is None or quality_reached > BEST_QUALITY_REACHED:
                     allocation = DECRYPTER.allocation()
                     solution = Solution(allocation, quality_reached)
-                    solution.show()
+                    solution.print_solution(sys.stdout)
+                    with open(self._solution_filename, 'w') as file_handle:
+                        solution.print_solution(file_handle)
 
                 best_quality_reached = quality_reached
 
@@ -847,34 +884,6 @@ class Attacker:
 ATTACKER: typing.Optional[Attacker] = None
 
 
-class Solution:
-    """ A solution """
-
-    def __init__(self, allocation: typing.Dict[str, str], quality: Evaluation) -> None:
-
-        self._allocation = copy.copy(allocation)
-        self._quality = quality
-
-    def show(self) -> None:
-        """ show solution """
-
-        assert DICTIONARY is not None
-
-        # get dictionary quality of result
-        my_decrypter = Decrypter()
-        my_decrypter.instantiate(self._allocation)
-        plain = my_decrypter.apply()
-        dictionary_quality, selected_words = DICTIONARY.extracted_words(plain)
-
-        print(' '.join(selected_words))
-        print(f"{dictionary_quality=}")
-        now = time.time()
-        speed = N_OPERATIONS / (now - BEFORE)
-        print(f"{speed=}")
-        print(f"quality={self._quality}")
-        my_decrypter.print_key(sys.stdout)
-
-
 def main() -> None:
     """ main """
 
@@ -885,6 +894,7 @@ def main() -> None:
     parser.add_argument('-L', '--limit', required=False, help='limit for the dictionary words to use')
     parser.add_argument('-l', '--letters', required=True, help='input a file with frequency table for letters')
     parser.add_argument('-c', '--cipher', required=True, help='cipher to attack')
+    parser.add_argument('-o', '--output', required=False, help='file where to output successive solutions')
     parser.add_argument('-H', '--hint_file', required=False, help='file with hint (sizes of buckets) in cipher')
     parser.add_argument('-s', '--substitution_mode', required=False, help='cipher is simple substitution (not homophonic)', action='store_true')
     args = parser.parse_args()
@@ -932,8 +942,9 @@ def main() -> None:
     ALLOCATOR = Allocator(substitution_mode)
     #  print(f"Allocator='{ALLOCATOR}'")
 
+    output_file = args.output
     global ATTACKER
-    ATTACKER = Attacker(substitution_mode)
+    ATTACKER = Attacker(output_file, substitution_mode)
 
     # outer hill climb
     while True:
