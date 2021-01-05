@@ -621,8 +621,8 @@ class Solution:
         print("=" * 50, file=file_handle)
         print(' '.join(selected_words), file=file_handle)
         print("=" * 50, file=file_handle)
-        print(f"{dictionary_quality=}", file=file_handle)
-        print(f"quality={self._quality}", file=file_handle)
+        print(f"dictionary_quality={dictionary_quality}", file=file_handle)
+        print(f"quality=[{self._quality}]", file=file_handle)
         my_decrypter.print_key(file_handle)
 
 
@@ -633,7 +633,7 @@ N_OPERATIONS = 0
 class Attacker:
     """ Attacker """
 
-    def __init__(self, solution_filename: str, substitution_mode: bool) -> None:
+    def __init__(self, solution_filename: typing.Optional[str], substitution_mode: bool) -> None:
 
         assert CIPHER is not None
 
@@ -862,8 +862,9 @@ class Attacker:
                     allocation = DECRYPTER.allocation()
                     solution = Solution(allocation, quality_reached)
                     solution.print_solution(sys.stdout)
-                    with open(self._solution_filename, 'w') as file_handle:
-                        solution.print_solution(file_handle)
+                    if self._solution_filename is not None:
+                        with open(self._solution_filename, 'w') as file_handle:
+                            solution.print_solution(file_handle)
 
                 best_quality_reached = quality_reached
 
