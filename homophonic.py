@@ -561,8 +561,40 @@ class Allocator:
 
 
 ALLOCATOR: typing.Optional[Allocator] = None
+
+
+class Evaluation:
+    """ Evaluation """
+
+    def __init__(self, coincidence_index_quality: float, n_grams_frequency_quality: float) -> None:
+
+        self._coincidence_index_quality = coincidence_index_quality
+        self._n_grams_frequency_quality = n_grams_frequency_quality
+
+    @property
+    def coincidence_index_quality(self) -> float:
+        """ property """
+        return self._coincidence_index_quality
+
+    @property
+    def n_grams_frequency_quality(self) -> float:
+        """ property """
+        return self._n_grams_frequency_quality
+
+    def __gt__(self, other: 'Evaluation') -> bool:
+
+        # TODO : at some point use the IC (using it alone lowers results a lot
+        # but it should be prefered at begining of hill climbing when quality is bad
+
+        return self._n_grams_frequency_quality > other.n_grams_frequency_quality
+        #  return self._coincidence_index_quality > other.coincidence_index_quality
+
+    def __str__(self) -> str:
+        return f"delta IC={self._coincidence_index_quality} ngram qual={self._n_grams_frequency_quality}"
+
+
+BEST_QUALITY_REACHED: typing.Optional[Evaluation] = None
 N_OPERATIONS = 0
-BEST_NGRAM_QUALITY_REACHED: typing.Optional[float] = None
 
 
 class Attacker:
@@ -758,7 +790,7 @@ class Attacker:
             self._nb_occ_plain[plain] += CIPHER.codes_number_occurence_table[cipher]
         self._overall_coincidence_index_quality = sum([self._nb_occ_plain[p] * (self._nb_occ_plain[p] - 1) for p in self._nb_occ_plain])
 
-    def make_tries(self) -> float:
+    def make_tries(self) -> Evaluation:
         """ make tries : this includes  random generator and inner hill climb """
 
         assert ALLOCATOR is not None
@@ -767,7 +799,7 @@ class Attacker:
         assert CIPHER is not None
 
         # records best quality reached
-        best_n_gram_quality_reached: typing.Optional[float] = None
+        best_quality_reached: typing.Optional[Evaluation] = None
 
         # limit the number of climbs
         number_climbs_left = self._number_climbs
@@ -783,24 +815,28 @@ class Attacker:
             # start a new session : climb as high as possible
             self._climb()
 
+            quality_ngrams_reached = self._overall_n_grams_frequency_quality
+            quality_coincidence_reached = - abs(len(ALPHABET) * self._overall_coincidence_index_quality / (len(CIPHER.cipher_str) * (len(CIPHER.cipher_str) - 1)) - REF_IC)
+            quality_reached = Evaluation(quality_coincidence_reached, quality_ngrams_reached)
+
             # handle local best quality
-            if best_n_gram_quality_reached is None or self._overall_n_grams_frequency_quality > best_n_gram_quality_reached:
+            if best_quality_reached is None or quality_reached > best_quality_reached:
 
                 # beaten local, show stuff if also beaten global
-                if BEST_NGRAM_QUALITY_REACHED is None or self._overall_n_grams_frequency_quality > BEST_NGRAM_QUALITY_REACHED:
+                if BEST_QUALITY_REACHED is None or quality_reached > BEST_QUALITY_REACHED:
                     allocation = DECRYPTER.allocation()
-                    quality_ngrams_reached = self._overall_n_grams_frequency_quality
-                    quality_coincidence_reached = - abs(len(ALPHABET) * self._overall_coincidence_index_quality / (len(CIPHER.cipher_str) * (len(CIPHER.cipher_str) - 1)) - REF_IC)
-                    solution = Solution(allocation, quality_ngrams_reached, quality_coincidence_reached)
+                    solution = Solution(allocation, quality_reached)
                     solution.show()
 
-                best_n_gram_quality_reached = self._overall_n_grams_frequency_quality
+                best_quality_reached = quality_reached
+
+                # restart a complete climb from here
                 number_climbs_left = self._number_climbs
 
             # stop at some point inner hill climb
             number_climbs_left -= 1
             if not number_climbs_left:
-                return best_n_gram_quality_reached
+                return best_quality_reached
 
     @property
     def overall_n_grams_frequency_quality(self) -> float:
@@ -814,11 +850,10 @@ ATTACKER: typing.Optional[Attacker] = None
 class Solution:
     """ A solution """
 
-    def __init__(self, allocation: typing.Dict[str, str], n_grams_frequency_quality: float, coincidence_index_quality: float, ) -> None:
+    def __init__(self, allocation: typing.Dict[str, str], quality: Evaluation) -> None:
 
         self._allocation = copy.copy(allocation)
-        self._n_grams_frequency_quality = n_grams_frequency_quality
-        self._coincidence_index_quality = coincidence_index_quality
+        self._quality = quality
 
     def show(self) -> None:
         """ show solution """
@@ -836,8 +871,7 @@ class Solution:
         now = time.time()
         speed = N_OPERATIONS / (now - BEFORE)
         print(f"{speed=}")
-        print(f"N-gram quality={self._n_grams_frequency_quality}")
-        print(f"IC quality={self._coincidence_index_quality}")
+        print(f"quality={self._quality}")
         my_decrypter.print_key(sys.stdout)
 
 
@@ -910,9 +944,9 @@ def main() -> None:
         if substitution_mode or hint_file is not None:
             break
 
-        global BEST_NGRAM_QUALITY_REACHED
-        if BEST_NGRAM_QUALITY_REACHED is None or quality_reached > BEST_NGRAM_QUALITY_REACHED:
-            BEST_NGRAM_QUALITY_REACHED = quality_reached
+        global BEST_QUALITY_REACHED
+        if BEST_QUALITY_REACHED is None or quality_reached > BEST_QUALITY_REACHED:
+            BEST_QUALITY_REACHED = quality_reached
 
         # remember this bucket as done
         BUCKET.remember()
