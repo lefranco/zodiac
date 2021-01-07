@@ -580,7 +580,7 @@ class Allocator:
 
 
 ALLOCATOR: typing.Optional[Allocator] = None
-CLIMBS_STARTS = 0.
+
 
 class Evaluation:
     """ Evaluation """
@@ -623,13 +623,9 @@ class Solution:
         self._quality = quality
 
     def print_solution(self, file_handle: typing.TextIO) -> None:
-        """ show print_solution """
+        """ print_solution """
 
         assert DICTIONARY is not None
-
-        # get speed
-        now = time.time()
-        speed = N_OPERATIONS / (now - CLIMBS_STARTS)
 
         # get dictionary quality of result
         my_decrypter = Decrypter()
@@ -638,7 +634,6 @@ class Solution:
         dictionary_quality, selected_words = DICTIONARY.extracted_words(plain)
 
         # print stuff
-        print(f"Speed is {speed} checks per sec", file=file_handle)
         print("=" * 50, file=file_handle)
         print(' '.join(selected_words), file=file_handle)
         print("=" * 50, file=file_handle)
@@ -678,6 +673,10 @@ class Attacker:
         print(f"INFORMATION: Inner hill climb will use max={self._number_climbs}")
 
         self._solution_filename = solution_filename
+
+        # to measure speed
+        self._n_operations = 0
+        self._time_climbs_starts = time.time()
 
     def _check_n_gram_frequency_quality(self) -> None:
         """ Evaluates quality from n_gram frequency DEBUG """
@@ -754,6 +753,9 @@ class Attacker:
                 plain = DECRYPTER.decode_some(cipher)
                 self._nb_occ_plain[plain] += CIPHER.codes_number_occurence_table[cipher]
                 self._overall_coincidence_index_quality += self._nb_occ_plain[plain] * (self._nb_occ_plain[plain] - 1)
+
+        # to measure speed
+        self._n_operations += 1
 
     def _go_up(self) -> bool:
         """ go up : try to improve things... """
@@ -845,7 +847,7 @@ class Attacker:
         self._overall_n_grams_frequency_quality = sum(self._n_grams_frequency_quality_table.values())
 
         # IOC
-        self._overall_coincidence_index_quality = 0.
+        self._overall_coincidence_index_quality = 0
         if USE_OIC:
             self._nb_occ_plain.clear()
             for cipher in CIPHER.cipher_codes:
@@ -903,6 +905,16 @@ class Attacker:
             number_climbs_left -= 1
             if not number_climbs_left:
                 return best_quality_reached
+
+    def show_speed(self, file_handle: typing.TextIO) -> None:
+        """ show speed """
+
+        # get speed
+        now = time.time()
+        speed = self._n_operations / (now - self._time_climbs_starts)
+
+        # print it
+        print(f"Speed is {speed} swaps per sec", file=file_handle)
 
     @property
     def overall_n_grams_frequency_quality(self) -> float:
@@ -970,14 +982,14 @@ def main() -> None:
     global ATTACKER
     ATTACKER = Attacker(output_file, substitution_mode)
 
-    global CLIMBS_STARTS
-    CLIMBS_STARTS = time.time()
-
     # outer hill climb
     while True:
 
         # inner hill climb (includes random allocator)
         quality_reached = ATTACKER.make_tries()
+
+        # show speed
+        ATTACKER.show_speed(sys.stdout)
 
         # actually these are test modes
         if substitution_mode or hint_file is not None:
