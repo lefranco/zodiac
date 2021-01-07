@@ -867,8 +867,8 @@ class Attacker:
             # start a new session : climb as high as possible
             self._climb()
 
-            quality_ngrams_reached = self._overall_n_grams_frequency_quality
             quality_coincidence_reached = - abs(len(ALPHABET) * self._overall_coincidence_index_quality / (len(CIPHER.cipher_str) * (len(CIPHER.cipher_str) - 1)) - REF_IOC)
+            quality_ngrams_reached = self._overall_n_grams_frequency_quality
             quality_reached = Evaluation(quality_coincidence_reached, quality_ngrams_reached)
 
             # handle local best quality
