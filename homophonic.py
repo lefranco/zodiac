@@ -25,7 +25,7 @@ import secrets  # instead of random
 import cProfile
 import pstats
 
-PROFILE = True
+PROFILE = False
 DEBUG = False
 
 RECURSION_LIMIT = 1500  # default is 1000 - this is only for when putting spaces when displaying clear text
