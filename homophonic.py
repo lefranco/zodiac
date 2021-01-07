@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/pypy3
 
 
 """
@@ -727,6 +727,9 @@ class Attacker:
 
         DECRYPTER.swap(cipher1, cipher2)
 
+        # to measure speed
+        self._n_operations += 1
+
         # effect
 
         for cipher in cipher1, cipher2:
@@ -753,9 +756,6 @@ class Attacker:
                 plain = DECRYPTER.decode_some(cipher)
                 self._nb_occ_plain[plain] += CIPHER.codes_number_occurence_table[cipher]
                 self._overall_coincidence_index_quality += self._nb_occ_plain[plain] * (self._nb_occ_plain[plain] - 1)
-
-        # to measure speed
-        self._n_operations += 1
 
     def _go_up(self) -> bool:
         """ go up : try to improve things... """
