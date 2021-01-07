@@ -456,6 +456,7 @@ class Bucket:
         assert self._table[decremented], "Internal error"
         self._table[decremented] -= 1
         self._table[incremented] += 1
+        assert self._table[incremented] <= MAX_BUCKET_SIZE, f"Cannot handle buckets with more than {MAX_BUCKET_SIZE} capacity"
 
     def _evaluate_fake_swap(self, decremented: str, incremented: str) -> float:
         """ evaluate swap letters in allocator """
