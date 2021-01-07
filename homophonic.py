@@ -27,6 +27,7 @@ import pstats
 
 PROFILE = False
 DEBUG = False
+USE_OIC = False
 
 RECURSION_LIMIT = 1500  # default is 1000 - this is only for when putting spaces when displaying clear text
 
@@ -480,7 +481,7 @@ class Bucket:
         possibles_swaps = [(d, i) for (d, i) in itertools.permutations(self._table, 2) if self._table[d]]
 
         # sorted by quality
-        possibles_swaps_sorted = sorted(possibles_swaps, key=lambda s: self._evaluate_fake_swap(s[0], s[1]), reverse = True)
+        possibles_swaps_sorted = sorted(possibles_swaps, key=lambda s: self._evaluate_fake_swap(s[0], s[1]), reverse=True)
 
         while True:
 
@@ -492,7 +493,7 @@ class Bucket:
             new_bucket_capture = tuple(self._table.values())
             if new_bucket_capture not in self._bucket_tried:
                 # show
-                print(f"{decremented=} {incremented=}")
+                print(f"decremented {decremented} / incremented {incremented}")
                 return True
 
             # undo bucket swap because already done
@@ -579,7 +580,7 @@ class Allocator:
 
 
 ALLOCATOR: typing.Optional[Allocator] = None
-
+CLIMBS_STARTS = 0.
 
 class Evaluation:
     """ Evaluation """
@@ -601,11 +602,13 @@ class Evaluation:
 
     def __gt__(self, other: 'Evaluation') -> bool:
 
-        # TODO : at some point use the IOC (using it alone lowers results a lot
+        # IOC (using it alone lowers results a lot)
         # but it should be prefered at begining of hill climbing when quality is bad
 
+        if USE_OIC:
+            return self._coincidence_index_quality > other.coincidence_index_quality
+
         return self._n_grams_frequency_quality > other.n_grams_frequency_quality
-        #  return self._coincidence_index_quality > other.coincidence_index_quality
 
     def __str__(self) -> str:
         return f"delta IOC={self._coincidence_index_quality} ngram qual={self._n_grams_frequency_quality}"
@@ -626,7 +629,7 @@ class Solution:
 
         # get speed
         now = time.time()
-        speed = N_OPERATIONS / (now - BEFORE)
+        speed = N_OPERATIONS / (now - CLIMBS_STARTS)
 
         # get dictionary quality of result
         my_decrypter = Decrypter()
@@ -635,7 +638,7 @@ class Solution:
         dictionary_quality, selected_words = DICTIONARY.extracted_words(plain)
 
         # print stuff
-        print(f"{speed=}", file=file_handle)
+        print(f"Speed is {speed} checks per sec", file=file_handle)
         print("=" * 50, file=file_handle)
         print(' '.join(selected_words), file=file_handle)
         print("=" * 50, file=file_handle)
@@ -697,6 +700,7 @@ class Attacker:
         """ Evaluates quality from index coincidence DEBUG """
 
         assert DEBUG
+        assert USE_OIC
 
         assert DECRYPTER is not None
 
@@ -715,11 +719,12 @@ class Attacker:
         assert CIPHER is not None
         assert DECRYPTER is not None
 
-        # IOC obliterated
-        for cipher in cipher1, cipher2:
-            plain = DECRYPTER.decode_some(cipher)
-            self._overall_coincidence_index_quality -= self._nb_occ_plain[plain] * (self._nb_occ_plain[plain] - 1)
-            self._nb_occ_plain[plain] -= CIPHER.codes_number_occurence_table[cipher]
+        if USE_OIC:
+            # IOC obliterated
+            for cipher in cipher1, cipher2:
+                plain = DECRYPTER.decode_some(cipher)
+                self._overall_coincidence_index_quality -= self._nb_occ_plain[plain] * (self._nb_occ_plain[plain] - 1)
+                self._nb_occ_plain[plain] -= CIPHER.codes_number_occurence_table[cipher]
 
         DECRYPTER.swap(cipher1, cipher2)
 
@@ -743,11 +748,12 @@ class Attacker:
                 # summed
                 self._overall_n_grams_frequency_quality += new_value
 
-        # new IOC
-        for cipher in cipher1, cipher2:
-            plain = DECRYPTER.decode_some(cipher)
-            self._nb_occ_plain[plain] += CIPHER.codes_number_occurence_table[cipher]
-            self._overall_coincidence_index_quality += self._nb_occ_plain[plain] * (self._nb_occ_plain[plain] - 1)
+        if USE_OIC:
+            # new IOC
+            for cipher in cipher1, cipher2:
+                plain = DECRYPTER.decode_some(cipher)
+                self._nb_occ_plain[plain] += CIPHER.codes_number_occurence_table[cipher]
+                self._overall_coincidence_index_quality += self._nb_occ_plain[plain] * (self._nb_occ_plain[plain] - 1)
 
     def _go_up(self) -> bool:
         """ go up : try to improve things... """
@@ -781,7 +787,8 @@ class Attacker:
 
             if DEBUG:
                 self._check_n_gram_frequency_quality()
-                self._check_index_coincidence_quality()
+                if USE_OIC:
+                    self._check_index_coincidence_quality()
 
             # did the quality improve ?
             if self._overall_n_grams_frequency_quality > old_overall_n_grams_frequency_quality:
@@ -796,7 +803,8 @@ class Attacker:
 
             if DEBUG:
                 self._check_n_gram_frequency_quality()
-                self._check_index_coincidence_quality()
+                if USE_OIC:
+                    self._check_index_coincidence_quality()
 
             # restore value
             self._overall_n_grams_frequency_quality = old_overall_n_grams_frequency_quality
@@ -837,11 +845,13 @@ class Attacker:
         self._overall_n_grams_frequency_quality = sum(self._n_grams_frequency_quality_table.values())
 
         # IOC
-        self._nb_occ_plain.clear()
-        for cipher in CIPHER.cipher_codes:
-            plain = DECRYPTER.decode_some(cipher)
-            self._nb_occ_plain[plain] += CIPHER.codes_number_occurence_table[cipher]
-        self._overall_coincidence_index_quality = sum([self._nb_occ_plain[p] * (self._nb_occ_plain[p] - 1) for p in self._nb_occ_plain])
+        self._overall_coincidence_index_quality = 0.
+        if USE_OIC:
+            self._nb_occ_plain.clear()
+            for cipher in CIPHER.cipher_codes:
+                plain = DECRYPTER.decode_some(cipher)
+                self._nb_occ_plain[plain] += CIPHER.codes_number_occurence_table[cipher]
+            self._overall_coincidence_index_quality = sum([self._nb_occ_plain[p] * (self._nb_occ_plain[p] - 1) for p in self._nb_occ_plain])
 
     def make_tries(self) -> Evaluation:
         """ make tries : this includes  random generator and inner hill climb """
@@ -960,6 +970,9 @@ def main() -> None:
     global ATTACKER
     ATTACKER = Attacker(output_file, substitution_mode)
 
+    global CLIMBS_STARTS
+    CLIMBS_STARTS = time.time()
+
     # outer hill climb
     while True:
 
@@ -1010,7 +1023,7 @@ if __name__ == '__main__':
     AFTER = time.time()
     ELAPSED = AFTER - BEFORE
     #  how long it took
-    print(f"{ELAPSED=:2.2f}")
+    print(f"Time taken is {ELAPSED:2.2f}sec.")
 
     # stats
     if PROFILE:
