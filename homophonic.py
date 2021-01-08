@@ -29,7 +29,7 @@ PROFILE = False
 DEBUG = False
 USE_OIC = False
 
-RECURSION_LIMIT = 1500  # default is 1000 - this is only for when putting spaces when displaying clear text
+RECURSION_LIMIT = 5000  # default is 1000 - this is only for when putting spaces when displaying clear text
 
 ALPHABET = [chr(i) for i in range(ord('a'), ord('z') + 1)]  # plain always lower case
 EPSILON_NO_OCCURENCES = 1e-99  # zero has - infinite as log, must be << 1
