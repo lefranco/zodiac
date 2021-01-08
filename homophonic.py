@@ -42,6 +42,11 @@ K_CIPHER_DIFFICULTY = 50.
 MIN_ATTACKER_CLIMBS = 10
 MAX_ATTACKER_CLIMBS = 100
 
+K_TEMPERATURE_ZERO = 1000.
+K_TEMPERATURE_REDUCTION = 0.05
+K_TEMPERATURE_FACTOR = 1
+NUMBER_BITS_RANDOM = 16
+
 REF_IOC = 0.
 
 
@@ -642,7 +647,6 @@ class Solution:
 
 
 BEST_QUALITY_REACHED: typing.Optional[Evaluation] = None
-N_OPERATIONS = 0
 
 
 class Attacker:
@@ -676,6 +680,9 @@ class Attacker:
         # to measure speed
         self._n_operations = 0
         self._time_climbs_starts = time.time()
+
+        # simulated annealing
+        self._temperature = 0.
 
     def _check_n_gram_frequency_quality(self) -> None:
         """ Evaluates quality from n_gram frequency DEBUG """
@@ -726,9 +733,6 @@ class Attacker:
 
         DECRYPTER.swap(cipher1, cipher2)
 
-        # to measure speed
-        self._n_operations += 1
-
         # effect
 
         for cipher in cipher1, cipher2:
@@ -756,6 +760,53 @@ class Attacker:
                 self._nb_occ_plain[plain] += CIPHER.codes_number_occurence_table[cipher]
                 self._overall_coincidence_index_quality += self._nb_occ_plain[plain] * (self._nb_occ_plain[plain] - 1)
 
+        # to measure speed
+        self._n_operations += 1
+
+    def _go_slightly_down(self) -> bool:
+        """ go slightly down : try not to give up by going slightly down after going up has failed... """
+
+        def decide_accept(proba_acceptance: float):
+            """ decide_accept """
+            assert 0. <= proba_acceptance <= 1.
+            alea = secrets.randbits(NUMBER_BITS_RANDOM) / 2 ** NUMBER_BITS_RANDOM
+            assert 0. <= alea <= 1.
+            return alea <= proba_acceptance
+
+        assert DECRYPTER is not None
+
+        neighbours = {(c1, c2) for (p1, p2) in itertools.combinations(DECRYPTER.allocated, 2) for c1 in DECRYPTER.reverse_table[p1] for c2 in DECRYPTER.reverse_table[p2]}
+
+        while True:
+
+            # take a random neighbour
+            neighbour = secrets.choice(list(neighbours))
+            cipher1, cipher2 = neighbour
+
+            # keep a note of quality before change
+            old_overall_n_grams_frequency_quality = self._overall_n_grams_frequency_quality
+
+            # apply change now
+            self._swap(cipher1, cipher2)
+
+            # quality should lower in this context
+            assert self._overall_n_grams_frequency_quality <= old_overall_n_grams_frequency_quality
+            delta_quality = abs(self._overall_n_grams_frequency_quality - old_overall_n_grams_frequency_quality)
+            proba_acceptance = math.exp(- delta_quality / (K_TEMPERATURE_FACTOR * self._temperature))
+
+            #print(f"{self._temperature=}")
+            #print(f"{delta_quality=}")
+            #print(f"{proba_acceptance=}")
+
+            # apply acceptance probability function
+            if decide_accept(proba_acceptance):
+                self._temperature -= (K_TEMPERATURE_REDUCTION * self._temperature)
+                return True
+
+            # not selected so undo
+            self._swap(cipher1, cipher2)
+            return False
+
     def _go_up(self) -> bool:
         """ go up : try to improve things... """
 
@@ -777,14 +828,9 @@ class Attacker:
 
             # keep a note of quality before change
             old_overall_n_grams_frequency_quality = self._overall_n_grams_frequency_quality
-            old_overall_coincidence_index_quality = self._overall_coincidence_index_quality
 
             # apply change now
             self._swap(cipher1, cipher2)
-
-            # debug purpose only
-            global N_OPERATIONS
-            N_OPERATIONS += 1
 
             if DEBUG:
                 self._check_n_gram_frequency_quality()
@@ -807,9 +853,6 @@ class Attacker:
                 if USE_OIC:
                     self._check_index_coincidence_quality()
 
-            # restore value
-            self._overall_n_grams_frequency_quality = old_overall_n_grams_frequency_quality
-            self._overall_coincidence_index_quality = old_overall_coincidence_index_quality
 
     def _climb(self) -> None:
         """ climb : keeps going up until fails to do so """
@@ -817,11 +860,19 @@ class Attacker:
         while True:
 
             # keeps climbing until fails to do so
+
+            # up
             succeeded = self._go_up()
-            if not succeeded:
-                print("-", flush=True)
-                return
-            print("/", end='', flush=True)
+            if succeeded:
+                print("/", end='', flush=True)
+            else:
+                # slightly down
+                succeeded = self._go_slightly_down()
+                if succeeded:
+                    print("\\", end='', flush=True)
+                else:
+                    print("-", flush=True)
+                    return
 
     def _reset_frequencies(self) -> None:
         """ reset_frequencies """
@@ -853,6 +904,9 @@ class Attacker:
                 plain = DECRYPTER.decode_some(cipher)
                 self._nb_occ_plain[plain] += CIPHER.codes_number_occurence_table[cipher]
             self._overall_coincidence_index_quality = sum([self._nb_occ_plain[p] * (self._nb_occ_plain[p] - 1) for p in self._nb_occ_plain])
+
+        # simulated annealing
+        self._temperature = K_TEMPERATURE_ZERO
 
     def make_tries(self) -> Evaluation:
         """ make tries : this includes  random generator and inner hill climb """
