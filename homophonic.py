@@ -44,7 +44,7 @@ MAX_ATTACKER_CLIMBS = 100
 
 K_TEMPERATURE_ZERO = 1000.
 K_TEMPERATURE_REDUCTION = 0.05
-K_TEMPERATURE_FACTOR = 1
+K_TEMPERATURE_FACTOR = 0.5
 NUMBER_BITS_RANDOM = 16
 
 REF_IOC = 0.
@@ -791,11 +791,11 @@ class Attacker:
 
             # quality should lower in this context
             assert self._overall_n_grams_frequency_quality <= old_overall_n_grams_frequency_quality
-            delta_quality = abs(self._overall_n_grams_frequency_quality - old_overall_n_grams_frequency_quality)
-            proba_acceptance = math.exp(- delta_quality / (K_TEMPERATURE_FACTOR * self._temperature))
+            delta_quality_percent = abs((self._overall_n_grams_frequency_quality - old_overall_n_grams_frequency_quality) / old_overall_n_grams_frequency_quality)
+            proba_acceptance = math.exp(- delta_quality_percent / (K_TEMPERATURE_FACTOR * self._temperature))
 
             #print(f"{self._temperature=}")
-            #print(f"{delta_quality=}")
+            #print(f"{delta_quality_percent=}")
             #print(f"{proba_acceptance=}")
 
             # apply acceptance probability function
