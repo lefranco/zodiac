@@ -1,2 +1,9 @@
-elonka1.txt from elonka book page 381
-elonka1.txt from elonka book page 396  / 519 / 552
+elonka1.txt from elonka book p. 381 - challenging example - sol p. 382
+elonka2.txt from elonka book p. 396 - challenging 16 - sol p. 552
+
+TODO elonka3.txt from elonka book p. 399 - challenging 30 - sol p. 553
+TODO elonka4.txt from elonka book p. 404 - challenging 45 - sol p. 554
+
+elonka5.txt from elonka book p. 449 - gradbag  16 - sol p. 564
+
+/ 519 / 552

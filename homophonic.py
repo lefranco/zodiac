@@ -976,7 +976,7 @@ def main() -> None:
     """ main """
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('-i', '--ic', required=True, help='input a file with index coincidence for language')
+    parser.add_argument('-i', '--ioc', required=False, help='input a file with index coincidence for language')
     parser.add_argument('-n', '--ngrams', required=True, help='input a file with frequency table for n_grams (n-letters)')
     parser.add_argument('-d', '--dictionary', required=True, help='input a file with frequency table for words (dictionary) to use')
     parser.add_argument('-L', '--limit', required=False, help='limit for the dictionary words to use')
@@ -988,8 +988,9 @@ def main() -> None:
     parser.add_argument('-s', '--substitution_mode', required=False, help='cipher is simple substitution (not homophonic)', action='store_true')
     args = parser.parse_args()
 
-    ref_ic_file = args.ic
-    load_reference_coincidence_index(ref_ic_file)
+    ref_ioc_file = args.ioc
+    if ref_ioc_file is not None:
+        load_reference_coincidence_index(ref_ioc_file)
 
     letters_file = args.letters
     global LETTERS
