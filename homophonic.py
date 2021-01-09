@@ -33,18 +33,18 @@ RECURSION_LIMIT = 5000  # default is 1000 - this is only for when putting spaces
 
 ALPHABET = [chr(i) for i in range(ord('a'), ord('z') + 1)]  # plain always lower case
 EPSILON_NO_OCCURENCES = 1e-99  # zero has - infinite as log, must be << 1
-EPSILON_DELTA_FLOAT = 0.000001  # to compare floats
+EPSILON_DELTA_FLOAT = 0.000001  # to compare floats (for debug check)
 
 MAX_SUBSTITUTION_STUFFING = 10
 MAX_BUCKET_SIZE = 99   # keep it to two digit
 
-K_CIPHER_DIFFICULTY = 5.
+K_CIPHER_DIFFICULTY = 5.  # tuned !
 MIN_ATTACKER_CLIMBS = 5
 MAX_ATTACKER_CLIMBS = 20
 
 K_TEMPERATURE_ZERO = 1000.
 K_TEMPERATURE_REDUCTION = 0.05
-K_TEMPERATURE_FACTOR = 0.5
+K_TEMPERATURE_FACTOR = 0.5   # tuned !
 NUMBER_BITS_RANDOM = 16
 
 REF_IOC = 0.
@@ -450,6 +450,9 @@ class Bucket:
             if sum(self._table.values()) == number_codes:
                 break
 
+        # to remember last fake swap so to undo it
+        self._last_swapped: typing.Optional[typing.Tuple[str, str]] = None
+
     def _do_fake_swap(self, decremented: str, incremented: str) -> None:
         """ swap letters in allocator """
 
@@ -494,8 +497,16 @@ class Bucket:
             self._do_fake_swap(decremented, incremented)
             new_bucket_capture = tuple(self._table.values())
             if new_bucket_capture not in self._bucket_tried:
+
                 # show
                 print(f"decremented {decremented} / incremented {incremented}")
+
+                # remember this bucket as done (so not to repeat with it)
+                self._bucket_tried.add(new_bucket_capture)
+
+                # remember so as to undo if necessary
+                self._last_swapped = (decremented, incremented)
+
                 return True
 
             # undo bucket swap because already done
@@ -503,13 +514,14 @@ class Bucket:
 
             # is there any change still possible ?
             if not possibles_swaps_sorted:
+                self._last_swapped = None
                 print("Cannot do any more bucket change")
                 return False
 
-    def remember(self) -> None:
-        """ remember """
-        bucket_capture = tuple(self._table.values())
-        self._bucket_tried.add(bucket_capture)
+    def un_swap(self):
+        assert self._last_swapped is not None, "Internal error"
+        (decremented, incremented) = self._last_swapped
+        self._do_fake_swap(incremented, decremented)  # pylint: disable=arguments-out-of-order
 
     def print_repartition(self, file_handle: typing.TextIO) -> None:
         """ print_repartition """
@@ -1036,6 +1048,9 @@ def main() -> None:
     global ATTACKER
     ATTACKER = Attacker(output_solutions_file, substitution_mode)
 
+    # need to know if there is a swap in bucket to undo
+    swap_done = False
+
     # outer hill climb
     while True:
 
@@ -1053,14 +1068,17 @@ def main() -> None:
         global BEST_QUALITY_REACHED
         if BEST_QUALITY_REACHED is None or quality_reached > BEST_QUALITY_REACHED:
             BEST_QUALITY_REACHED = quality_reached
-
-        # remember this bucket as done
-        BUCKET.remember()
+        else:
+            if swap_done:
+                BUCKET.un_swap()
 
         # change bucket if still possible
         status = BUCKET.find_apply_fake_swap()
         if not status:
             break
+
+        # a swap was done
+        swap_done = True
 
         # show new bucket
         print("=============================================")
