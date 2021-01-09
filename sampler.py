@@ -22,6 +22,7 @@ class Plain:
     def __init__(self, filename: str) -> None:
 
         self._content: typing.List[str] = list()
+        self._words: typing.List[str] = list()
 
         with open(filename) as filepointer:
             for line in filepointer:
@@ -32,9 +33,10 @@ class Plain:
                     only_ascii_str = only_ascii.decode()
                     for word in only_ascii_str.split():
                         word = word.lower()
+                        word = ''.join([ll for ll in word if ll in ALPHABET])
+                        self._words.append(word)
                         for letter in word:
-                            if letter not in ALPHABET:
-                                continue
+                            assert letter in ALPHABET
                             self._content.append(letter)
 
         self._plain_str = ''.join(self._content)
@@ -42,7 +44,8 @@ class Plain:
     def stats(self, file_handle: typing.TextIO) -> None:
         """ stats """
 
-        quads_count = collections.Counter([self._plain_str[p: p+4] for p in range(len(self._plain_str)-4)])
+        quads_count = collections.Counter(self._words)
+#        quads_count = collections.Counter([self._plain_str[p: p+4] for p in range(len(self._plain_str)-4)])
 
         with contextlib.redirect_stdout(file_handle):
             for quad in sorted(quads_count, key=lambda q: quads_count[q], reverse=True):
