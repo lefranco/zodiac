@@ -34,10 +34,11 @@ class Plain:
                     for word in only_ascii_str.split():
                         word = word.lower()
                         word = ''.join([ll for ll in word if ll in ALPHABET])
-                        self._words.append(word)
-                        for letter in word:
-                            assert letter in ALPHABET
-                            self._content.append(letter)
+                        if word:
+                            self._words.append(word)
+                            for letter in word:
+                                assert letter in ALPHABET
+                                self._content.append(letter)
 
         self._plain_str = ''.join(self._content)
 

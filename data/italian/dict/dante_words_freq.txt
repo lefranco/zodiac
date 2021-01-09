@@ -591,7 +591,6 @@ saper 18
 acqua 18
 piante 18
 fortuna 18
- 18
 vergogna 18
 penne 18
 verace 17
