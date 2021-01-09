@@ -38,9 +38,9 @@ EPSILON_DELTA_FLOAT = 0.000001  # to compare floats
 MAX_SUBSTITUTION_STUFFING = 10
 MAX_BUCKET_SIZE = 99   # keep it to two digit
 
-K_CIPHER_DIFFICULTY = 10.
-MIN_ATTACKER_CLIMBS = 10
-MAX_ATTACKER_CLIMBS = 25
+K_CIPHER_DIFFICULTY = 5.
+MIN_ATTACKER_CLIMBS = 5
+MAX_ATTACKER_CLIMBS = 20
 
 K_TEMPERATURE_ZERO = 1000.
 K_TEMPERATURE_REDUCTION = 0.05
@@ -57,7 +57,7 @@ def load_reference_coincidence_index(filename: str) -> None:
             line = line.rstrip('\n')
             global REF_IOC
             REF_IOC = float(line)
-            print(f"INFORMATION  :reference IOC is {REF_IOC}")
+            print(f"INFORMATION: Reference IOC is {REF_IOC}")
             return
 
 
@@ -524,13 +524,14 @@ class Bucket:
                 else:
                     print(' ', end='')
             print()
-            for letter in ALPHABET:
-                number = self._table[letter]
-                if number // 10:
-                    print(number // 10, end='')
-                else:
-                    print(' ', end='')
-            print()
+            if any([n > 9 for n in self._table.values()]):
+                for letter in ALPHABET:
+                    number = self._table[letter]
+                    if number // 10:
+                        print(number // 10, end='')
+                    else:
+                        print(' ', end='')
+                print()
             print("." * len(ALPHABET))
 
     @property
@@ -671,7 +672,7 @@ class Attacker:
             self._number_climbs = min(MAX_ATTACKER_CLIMBS, self._number_climbs)
             self._number_climbs = max(MIN_ATTACKER_CLIMBS, self._number_climbs)
 
-        print(f"INFORMATION: Inner hill climb will use max={self._number_climbs}")
+        print(f"INFORMATION: Inner hill climb will limit number of climbs to {self._number_climbs}")
 
         self._solution_filename = solution_filename
 
@@ -1015,11 +1016,16 @@ def main() -> None:
     global DECRYPTER
     DECRYPTER = Decrypter()
 
+    output_allocations_file = args.output_allocations
+
     hint_file = args.hint_file
     global BUCKET
     BUCKET = Bucket(substitution_mode, hint_file)
     print("Initial Bucket:")
     BUCKET.print_repartition(sys.stdout)
+    if output_allocations_file is not None:
+        with open(output_allocations_file, 'w') as file_handle:
+            BUCKET.print_repartition(file_handle)
 
     global ALLOCATOR
     ALLOCATOR = Allocator(substitution_mode)
@@ -1028,8 +1034,6 @@ def main() -> None:
     output_solutions_file = args.output_solutions
     global ATTACKER
     ATTACKER = Attacker(output_solutions_file, substitution_mode)
-
-    output_allocations_file = args.output_allocations
 
     # outer hill climb
     while True:
