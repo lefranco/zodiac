@@ -976,7 +976,7 @@ def main() -> None:
     """ main """
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('-i', '--ioc', required=False, help='input a file with index coincidence for language')
+    parser.add_argument('-i', '--ioc', required=USE_OIC, help='input a file with index coincidence for language')
     parser.add_argument('-n', '--ngrams', required=True, help='input a file with frequency table for n_grams (n-letters)')
     parser.add_argument('-d', '--dictionary', required=True, help='input a file with frequency table for words (dictionary) to use')
     parser.add_argument('-L', '--limit', required=False, help='limit for the dictionary words to use')
