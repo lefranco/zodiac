@@ -164,22 +164,20 @@ class Dictionary:
         raw_frequency_table: typing.Dict[str, int] = dict()
 
         # pass one : read the file
-        line_num = 1
         with open(filename) as filepointer:
-            for line in filepointer:
+            for line_num, line in enumerate(filepointer):
                 line = line.rstrip('\n')
                 word, frequency_str = line.split()
                 word = word.lower()
 
-                assert not [ll for ll in word if ll not in ALPHABET], f"ERROR : bad word found in dictionary line {line_num} : <{word}>"
+                assert not [ll for ll in word if ll not in ALPHABET], f"ERROR : bad word found in dictionary line {line_num+1} : <{word}>"
 
                 if word in raw_frequency_table:
-                    print(f"WARNING : duplicated word '{word}' for dictionary line {line_num}")
+                    print(f"WARNING : duplicated word '{word}' for dictionary line {line_num+1}")
                     continue
 
                 frequency = int(frequency_str)
                 raw_frequency_table[word] = frequency
-                line_num += 1
 
                 if limit is not None and len(raw_frequency_table) >= limit:
                     print(f"INFORMATION: Ignoring dictionary words after the {limit}th")
