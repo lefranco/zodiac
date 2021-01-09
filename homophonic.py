@@ -764,10 +764,10 @@ class Attacker:
     def _go_slightly_down(self) -> bool:
         """ go slightly down : try not to give up by going slightly down after going up has failed... """
 
-        def decide_accept(proba_acceptance: float):
+        def decide_accept(proba_acceptance: float) -> bool:
             """ decide_accept """
             assert 0. <= proba_acceptance <= 1.
-            alea = secrets.randbits(NUMBER_BITS_RANDOM) / 2 ** NUMBER_BITS_RANDOM
+            alea = float(secrets.randbits(NUMBER_BITS_RANDOM) / 2 ** NUMBER_BITS_RANDOM)
             assert 0. <= alea <= 1.
             return alea <= proba_acceptance
 
@@ -791,10 +791,6 @@ class Attacker:
             assert self._overall_n_grams_frequency_quality <= old_overall_n_grams_frequency_quality
             delta_quality_percent = abs((self._overall_n_grams_frequency_quality - old_overall_n_grams_frequency_quality) / old_overall_n_grams_frequency_quality)
             proba_acceptance = math.exp(- delta_quality_percent / (K_TEMPERATURE_FACTOR * self._temperature))
-
-            #print(f"{self._temperature=}")
-            #print(f"{delta_quality_percent=}")
-            #print(f"{proba_acceptance=}")
 
             # apply acceptance probability function
             if decide_accept(proba_acceptance):
@@ -850,7 +846,6 @@ class Attacker:
                 self._check_n_gram_frequency_quality()
                 if USE_OIC:
                     self._check_index_coincidence_quality()
-
 
     def _climb(self) -> None:
         """ climb : keeps going up until fails to do so """
@@ -986,7 +981,8 @@ def main() -> None:
     parser.add_argument('-L', '--limit', required=False, help='limit for the dictionary words to use')
     parser.add_argument('-l', '--letters', required=True, help='input a file with frequency table for letters')
     parser.add_argument('-c', '--cipher', required=True, help='cipher to attack')
-    parser.add_argument('-o', '--output', required=False, help='file where to output successive solutions')
+    parser.add_argument('-o', '--output_solutions', required=False, help='file where to output successive solutions')
+    parser.add_argument('-O', '--output_allocations', required=False, help='file where to output successive attempted allocations')
     parser.add_argument('-H', '--hint_file', required=False, help='file with hint (sizes of buckets) in cipher')
     parser.add_argument('-s', '--substitution_mode', required=False, help='cipher is simple substitution (not homophonic)', action='store_true')
     args = parser.parse_args()
@@ -1029,9 +1025,11 @@ def main() -> None:
     ALLOCATOR = Allocator(substitution_mode)
     #  print(f"Allocator='{ALLOCATOR}'")
 
-    output_file = args.output
+    output_solutions_file = args.output_solutions
     global ATTACKER
-    ATTACKER = Attacker(output_file, substitution_mode)
+    ATTACKER = Attacker(output_solutions_file, substitution_mode)
+
+    output_allocations_file = args.output_allocations
 
     # outer hill climb
     while True:
@@ -1063,6 +1061,9 @@ def main() -> None:
         print("=============================================")
         print("New Bucket:")
         BUCKET.print_repartition(sys.stdout)
+        if output_allocations_file is not None:
+            with open(output_allocations_file, 'w') as file_handle:
+                BUCKET.print_repartition(file_handle)
 
 
 if __name__ == '__main__':
