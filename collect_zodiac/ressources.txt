@@ -1,1 +1,3 @@
-http://zodiackillerciphers.com/wiki
+tools = http://zodiackillerciphers.com/wiki
+
+forum = http://www.zodiackillersite.com/
