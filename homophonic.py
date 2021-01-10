@@ -42,9 +42,10 @@ K_CIPHER_DIFFICULTY = 5.  # tuned !
 MIN_ATTACKER_CLIMBS = 5
 MAX_ATTACKER_CLIMBS = 20
 
-K_TEMPERATURE_ZERO = 1000.
-K_TEMPERATURE_REDUCTION = 0.05
+K_TEMPERATURE_ZERO = 1000.   # by convention keep it that way
+K_TEMPERATURE_REDUCTION = 0.05   # tuned ! - less : too slow - more : not efficient
 K_TEMPERATURE_FACTOR = 0.5   # tuned !
+
 NUMBER_BITS_RANDOM = 16
 
 REF_IOC = 0.
