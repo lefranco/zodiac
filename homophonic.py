@@ -27,7 +27,6 @@ import pstats
 
 PROFILE = False
 DEBUG = False
-USE_OIC = False
 
 RECURSION_LIMIT = 5000  # default is 1000 - this is only for when putting spaces when displaying plain text
 
@@ -304,11 +303,6 @@ class Cipher:
         return self._n_grams_number_occurence_table
 
     @property
-    def codes_number_occurence_table(self) -> typing.Counter[str]:
-        """ property """
-        return self._codes_number_occurence_table
-
-    @property
     def n_grams_localization_table(self) -> typing.Dict[str, typing.List[str]]:
         """ property """
         return self._n_grams_localization_table
@@ -519,7 +513,8 @@ class Bucket:
                 print("Cannot do any more bucket change")
                 return False
 
-    def un_swap(self):
+    def un_swap(self) -> None:
+        """ un_swap """
         assert self._last_swapped is not None, "Internal error"
         (decremented, incremented) = self._last_swapped
         self._do_fake_swap(incremented, decremented)  # pylint: disable=arguments-out-of-order
@@ -601,15 +596,8 @@ ALLOCATOR: typing.Optional[Allocator] = None
 class Evaluation:
     """ Evaluation """
 
-    def __init__(self, coincidence_index_quality: float, n_grams_frequency_quality: float) -> None:
-
-        self._coincidence_index_quality = coincidence_index_quality
+    def __init__(self, n_grams_frequency_quality: float) -> None:
         self._n_grams_frequency_quality = n_grams_frequency_quality
-
-    @property
-    def coincidence_index_quality(self) -> float:
-        """ property """
-        return self._coincidence_index_quality
 
     @property
     def n_grams_frequency_quality(self) -> float:
@@ -617,17 +605,10 @@ class Evaluation:
         return self._n_grams_frequency_quality
 
     def __gt__(self, other: 'Evaluation') -> bool:
-
-        # IOC (using it alone lowers results a lot)
-        # but it should be prefered at begining of hill climbing when quality is bad
-
-        if USE_OIC:
-            return self._coincidence_index_quality > other.coincidence_index_quality
-
         return self._n_grams_frequency_quality > other.n_grams_frequency_quality
 
     def __str__(self) -> str:
-        return f"delta IOC={self._coincidence_index_quality} ngram qual={self._n_grams_frequency_quality}"
+        return f"ngram qual={self._n_grams_frequency_quality}"
 
 
 class Solution:
@@ -642,17 +623,26 @@ class Solution:
         """ print_solution """
 
         assert DICTIONARY is not None
+        assert CIPHER is not None
 
-        # get dictionary quality of result
+        # get plain
         my_decrypter = Decrypter()
         my_decrypter.instantiate(self._allocation)
         plain = my_decrypter.apply()
+
+        # get dictionary quality of result
         dictionary_quality, selected_words = DICTIONARY.extracted_words(plain)
+
+        # get OIC of result
+        nb_occ_plain = {ll: plain.count(ll) for ll in ALPHABET}
+        overall_coincidence_index_quality = sum([nb_occ_plain[p] * (nb_occ_plain[p] - 1) for p in nb_occ_plain])
+        index_of_coincidence_reached = (len(ALPHABET) * overall_coincidence_index_quality) / (len(CIPHER.cipher_str) * (len(CIPHER.cipher_str) - 1))
 
         # print stuff
         print("=" * 50, file=file_handle)
         print(' '.join(selected_words), file=file_handle)
         print("=" * 50, file=file_handle)
+        print(f"index_of_coincidence_reached={index_of_coincidence_reached} (reference={REF_IOC})", file=file_handle)
         print(f"dictionary_quality={dictionary_quality}", file=file_handle)
         print(f"quality=[{self._quality}]", file=file_handle)
         my_decrypter.print_key(file_handle)
@@ -671,11 +661,7 @@ class Attacker:
         # a table for remembering frequencies
         self._n_grams_frequency_quality_table: typing.Dict[str, float] = dict()
 
-        # a table for remembering nb occurences plain
-        self._nb_occ_plain: typing.Dict[str, int] = collections.defaultdict(int)
-
         self._overall_n_grams_frequency_quality = 0.
-        self._overall_coincidence_index_quality = 0
 
         if substitution_mode:
             self._number_climbs = MAX_ATTACKER_CLIMBS
@@ -713,35 +699,12 @@ class Attacker:
 
         assert abs(qcheck - self._overall_n_grams_frequency_quality) < EPSILON_DELTA_FLOAT, "Debug mode detected an error for N-Gram freq"
 
-    def _check_index_coincidence_quality(self) -> None:
-        """ Evaluates quality from index coincidence DEBUG """
-
-        assert DEBUG
-        assert USE_OIC
-
-        assert DECRYPTER is not None
-
-        # debug check
-        plain = DECRYPTER.apply()
-        assert all([plain.count(ll) == self._nb_occ_plain[ll] for ll in set(plain)])
-
-        qcheck = sum([self._nb_occ_plain[p] * (self._nb_occ_plain[p] - 1) for p in self._nb_occ_plain])
-
-        assert qcheck == self._overall_coincidence_index_quality, "Debug mode detected an error for IOC"
-
     def _swap(self, cipher1: str, cipher2: str) -> None:
         """ swap: this is where most CPU time is spent in the program """
 
         assert NGRAMS is not None
         assert CIPHER is not None
         assert DECRYPTER is not None
-
-        if USE_OIC:
-            # IOC obliterated
-            for cipher in cipher1, cipher2:
-                plain = DECRYPTER.decode_some(cipher)
-                self._overall_coincidence_index_quality -= self._nb_occ_plain[plain] * (self._nb_occ_plain[plain] - 1)
-                self._nb_occ_plain[plain] -= CIPHER.codes_number_occurence_table[cipher]
 
         DECRYPTER.swap(cipher1, cipher2)
 
@@ -764,13 +727,6 @@ class Attacker:
 
                 # summed
                 self._overall_n_grams_frequency_quality += new_value
-
-        if USE_OIC:
-            # new IOC
-            for cipher in cipher1, cipher2:
-                plain = DECRYPTER.decode_some(cipher)
-                self._nb_occ_plain[plain] += CIPHER.codes_number_occurence_table[cipher]
-                self._overall_coincidence_index_quality += self._nb_occ_plain[plain] * (self._nb_occ_plain[plain] - 1)
 
         # to measure speed
         self._n_operations += 1
@@ -842,8 +798,6 @@ class Attacker:
 
             if DEBUG:
                 self._check_n_gram_frequency_quality()
-                if USE_OIC:
-                    self._check_index_coincidence_quality()
 
             # did the quality improve ?
             if self._overall_n_grams_frequency_quality > old_overall_n_grams_frequency_quality:
@@ -858,8 +812,6 @@ class Attacker:
 
             if DEBUG:
                 self._check_n_gram_frequency_quality()
-                if USE_OIC:
-                    self._check_index_coincidence_quality()
 
     def _climb(self) -> None:
         """ climb : keeps going up until fails to do so """
@@ -903,15 +855,6 @@ class Attacker:
         # summed
         self._overall_n_grams_frequency_quality = sum(self._n_grams_frequency_quality_table.values())
 
-        # IOC
-        self._overall_coincidence_index_quality = 0
-        if USE_OIC:
-            self._nb_occ_plain.clear()
-            for cipher in CIPHER.cipher_codes:
-                plain = DECRYPTER.decode_some(cipher)
-                self._nb_occ_plain[plain] += CIPHER.codes_number_occurence_table[cipher]
-            self._overall_coincidence_index_quality = sum([self._nb_occ_plain[p] * (self._nb_occ_plain[p] - 1) for p in self._nb_occ_plain])
-
         # simulated annealing
         self._temperature = K_TEMPERATURE_ZERO
 
@@ -940,9 +883,8 @@ class Attacker:
             # start a new session : climb as high as possible
             self._climb()
 
-            quality_coincidence_reached = - abs(len(ALPHABET) * self._overall_coincidence_index_quality / (len(CIPHER.cipher_str) * (len(CIPHER.cipher_str) - 1)) - REF_IOC)
             quality_ngrams_reached = self._overall_n_grams_frequency_quality
-            quality_reached = Evaluation(quality_coincidence_reached, quality_ngrams_reached)
+            quality_reached = Evaluation(quality_ngrams_reached)
 
             # handle local best quality
             if best_quality_reached is None or quality_reached > best_quality_reached:
@@ -989,7 +931,7 @@ def main() -> None:
     """ main """
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('-i', '--ioc', required=USE_OIC, help='input a file with index coincidence for language')
+    parser.add_argument('-i', '--ioc', required=True, help='input a file with index coincidence for language')
     parser.add_argument('-n', '--ngrams', required=True, help='input a file with frequency table for n_grams (n-letters)')
     parser.add_argument('-d', '--dictionary', required=True, help='input a file with frequency table for words (dictionary) to use')
     parser.add_argument('-L', '--limit', required=False, help='limit for the dictionary words to use')
