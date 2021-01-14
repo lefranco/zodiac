@@ -27,6 +27,7 @@ import pstats
 
 PROFILE = False
 DEBUG = False
+VERBOSE = True
 
 RECURSION_LIMIT = 5000  # default is 1000 - this is only for when putting spaces when displaying plain text
 
@@ -37,9 +38,7 @@ EPSILON_DELTA_FLOAT = 0.000001  # to compare floats (for debug check)
 MAX_SUBSTITUTION_STUFFING = 10
 MAX_BUCKET_SIZE = 99   # keep it to two digit
 
-K_CIPHER_DIFFICULTY = 5.  # tuned !
-MIN_ATTACKER_CLIMBS = 5
-MAX_ATTACKER_CLIMBS = 20
+MAX_ATTACKER_CLIMBS = 3
 
 K_TEMPERATURE_ZERO = 1000.   # by convention keep it that way
 K_TEMPERATURE_REDUCTION = 0.05   # tuned ! - less : too slow - more : not efficient
@@ -274,13 +273,9 @@ class Cipher:
             for code in n_gram:
                 self._n_grams_localization_table[code].append(n_gram)
 
-    def difficulty(self) -> int:
+    def print_difficulty(self) -> None:
         """ climb_difficulty """
         print(f"INFORMATION: We have a cipher with {len(self._cipher_codes)} different codes and a length of {len(self._content)}")
-        difficulty_from_codes = (len(self._cipher_codes) / len(ALPHABET)) ** 2
-        easiness_from_size = math.sqrt(len(self._content) / len(self._cipher_codes))
-        res = int(K_CIPHER_DIFFICULTY * difficulty_from_codes / easiness_from_size)
-        return res
 
     @property
     def cipher_codes(self) -> str:
@@ -557,8 +552,8 @@ class Allocator:
     def __init__(self, substitution_mode: bool) -> None:
         self._substitution_mode = substitution_mode
 
-    def make_allocation(self) -> typing.Dict[str, str]:
-        """ Makes a random allocation to start with """
+    def make_random_key(self) -> typing.Dict[str, str]:
+        """ Makes a random key to start with """
 
         assert CIPHER is not None
         assert BUCKET is not None
@@ -614,10 +609,10 @@ class Evaluation:
 class Solution:
     """ A solution """
 
-    def __init__(self, allocation: typing.Dict[str, str], quality: Evaluation) -> None:
+    def __init__(self, quality: Evaluation, allocation: typing.Dict[str, str]) -> None:
 
-        self._allocation = copy.copy(allocation)
         self._quality = quality
+        self._allocation = copy.copy(allocation)
 
     def print_solution(self, file_handle: typing.TextIO) -> None:
         """ print_solution """
@@ -654,26 +649,21 @@ BEST_QUALITY_REACHED: typing.Optional[Evaluation] = None
 class Attacker:
     """ Attacker """
 
-    def __init__(self, solution_filename: typing.Optional[str], substitution_mode: bool) -> None:
+    def __init__(self, verbose: bool) -> None:
 
         assert CIPHER is not None
+
+        self._verbose = verbose
 
         # a table for remembering frequencies
         self._n_grams_frequency_quality_table: typing.Dict[str, float] = dict()
 
         self._overall_n_grams_frequency_quality = 0.
 
-        if substitution_mode:
-            self._number_climbs = MAX_ATTACKER_CLIMBS
-        else:
-            # number of climbs = cipher difficulty
-            self._number_climbs = CIPHER.difficulty()
-            self._number_climbs = min(MAX_ATTACKER_CLIMBS, self._number_climbs)
-            self._number_climbs = max(MIN_ATTACKER_CLIMBS, self._number_climbs)
+        CIPHER.print_difficulty()
 
+        self._number_climbs = MAX_ATTACKER_CLIMBS
         print(f"INFORMATION: Inner hill climb will limit number of climbs to {self._number_climbs}")
-
-        self._solution_filename = solution_filename
 
         # to measure speed
         self._n_operations = 0
@@ -823,14 +813,17 @@ class Attacker:
             # up
             succeeded = self._go_up()
             if succeeded:
-                print("/", end='', flush=True)
+                if self._verbose:
+                    print("/", end='', flush=True)
             else:
                 # slightly down
                 succeeded = self._go_slightly_down()
                 if succeeded:
-                    print("\\", end='', flush=True)
+                    if self._verbose:
+                        print("\\", end='', flush=True)
                 else:
-                    print("-", flush=True)
+                    if self._verbose:
+                        print("-", flush=True)
                     return
 
     def _reset_frequencies(self) -> None:
@@ -858,7 +851,7 @@ class Attacker:
         # simulated annealing
         self._temperature = K_TEMPERATURE_ZERO
 
-    def make_tries(self) -> Evaluation:
+    def make_tries(self) -> typing.Tuple[Evaluation, typing.Dict[str, str]]:
         """ make tries : this includes  random generator and inner hill climb """
 
         assert ALLOCATOR is not None
@@ -873,9 +866,9 @@ class Attacker:
         number_climbs_left = self._number_climbs
         while True:
 
-            # random allocator
-            initial_allocation = ALLOCATOR.make_allocation()
-            DECRYPTER.instantiate(initial_allocation)
+            # random key
+            initial_key = ALLOCATOR.make_random_key()
+            DECRYPTER.instantiate(initial_key)
 
             # reset frequency tables from new allocation
             self._reset_frequencies()
@@ -885,20 +878,13 @@ class Attacker:
 
             quality_ngrams_reached = self._overall_n_grams_frequency_quality
             quality_reached = Evaluation(quality_ngrams_reached)
+            key_reached = DECRYPTER.allocation()
 
             # handle local best quality
             if best_quality_reached is None or quality_reached > best_quality_reached:
 
-                # beaten local, show stuff if also beaten global
-                if BEST_QUALITY_REACHED is None or quality_reached > BEST_QUALITY_REACHED:
-                    allocation = DECRYPTER.allocation()
-                    solution = Solution(allocation, quality_reached)
-                    solution.print_solution(sys.stdout)
-                    if self._solution_filename is not None:
-                        with open(self._solution_filename, 'w') as file_handle:
-                            solution.print_solution(file_handle)
-
                 best_quality_reached = quality_reached
+                best_key_reached = key_reached
 
                 # restart a complete climb from here
                 number_climbs_left = self._number_climbs
@@ -906,7 +892,7 @@ class Attacker:
             # stop at some point inner hill climb
             number_climbs_left -= 1
             if not number_climbs_left:
-                return best_quality_reached
+                return best_quality_reached, best_key_reached
 
     def show_speed(self, file_handle: typing.TextIO) -> None:
         """ show speed """
@@ -987,18 +973,34 @@ def main() -> None:
     ALLOCATOR = Allocator(substitution_mode)
     #  print(f"Allocator='{ALLOCATOR}'")
 
-    output_solutions_file = args.output_solutions
     global ATTACKER
-    ATTACKER = Attacker(output_solutions_file, substitution_mode)
+    verbose = VERBOSE
+    ATTACKER = Attacker(verbose)
 
     # need to know if there is a swap in bucket to undo
     swap_done = False
 
+    # file to best solution online
+    output_solutions_file = args.output_solutions
+
     # outer hill climb
     while True:
 
-        # inner hill climb (includes random allocator)
-        quality_reached = ATTACKER.make_tries()
+        # inner hill climb (includes random start key generator)
+        quality_reached, key_reached = ATTACKER.make_tries()
+
+        #  show stuff if beaten global
+        global BEST_QUALITY_REACHED
+        if BEST_QUALITY_REACHED is None or quality_reached > BEST_QUALITY_REACHED:
+            solution = Solution(quality_reached, key_reached)
+            solution.print_solution(sys.stdout)
+            if output_solutions_file is not None:
+                with open(output_solutions_file, 'w') as file_handle:
+                    solution.print_solution(file_handle)
+            BEST_QUALITY_REACHED = quality_reached
+        else:
+            if swap_done:
+                BUCKET.un_swap()
 
         # show speed
         ATTACKER.show_speed(sys.stdout)
@@ -1006,14 +1008,6 @@ def main() -> None:
         # actually these are test modes
         if substitution_mode or hint_file is not None:
             break
-
-        # if this inner clib hill improved things, record it
-        global BEST_QUALITY_REACHED
-        if BEST_QUALITY_REACHED is None or quality_reached > BEST_QUALITY_REACHED:
-            BEST_QUALITY_REACHED = quality_reached
-        else:
-            if swap_done:
-                BUCKET.un_swap()
 
         # change bucket if still possible
         status = BUCKET.find_apply_fake_swap()
