@@ -32,6 +32,7 @@ import pstats
 PROFILE = False
 DEBUG = False
 IMPATIENT = False
+VERBOSE = False
 
 
 RECURSION_LIMIT = 5000  # default is 1000 - this is only for when putting spaces when displaying plain text
@@ -43,7 +44,7 @@ EPSILON_DELTA_FLOAT = 0.000001  # to compare floats (for debug check)
 MAX_SUBSTITUTION_STUFFING = 10
 MAX_BUCKET_SIZE = 99   # keep it to two digit
 
-MAX_ATTACKER_CLIMBS = 1  # should be more
+MAX_ATTACKER_CLIMBS = 2  
 
 K_TEMPERATURE_ZERO = 1000.   # by convention keep it that way
 K_TEMPERATURE_REDUCTION = 0.05   # tuned ! - less : too slow - more : not efficient
@@ -408,9 +409,6 @@ class Bucket:
 
         assert CIPHER is not None
 
-        # set of buckets tried to avoid repeat (in tuple form)
-        self._bucket_tried: typing.Set[typing.Tuple[int, ...]] = set()
-
         if substitution_mode:
 
             assert hint_file is None, "There cannot be a hint file in substitution mode"
@@ -485,6 +483,10 @@ class Bucket:
 
         # show
         print(f"decremented {decremented} / incremented {incremented}")
+
+    def instantiate(self, allocation_num: typing.Dict[str, int]) -> None:
+        """ instantiate """
+        self._table = copy.copy(allocation_num)
 
     def print_repartition(self, file_handle: typing.TextIO) -> None:
         """ print_repartition """
@@ -581,10 +583,10 @@ class Evaluation:
 class Solution:
     """ A solution """
 
-    def __init__(self, quality: Evaluation, allocation: typing.Dict[str, str]) -> None:
+    def __init__(self, quality: Evaluation, the_key: typing.Dict[str, str]) -> None:
 
         self._quality = quality
-        self._allocation = copy.copy(allocation)
+        self._the_key = copy.copy(the_key)
 
     def print_solution(self, file_handle: typing.TextIO) -> None:
         """ print_solution """
@@ -594,7 +596,7 @@ class Solution:
 
         # get plain
         my_decrypter = Decrypter()
-        my_decrypter.instantiate(self._allocation)
+        my_decrypter.instantiate(self._the_key)
         plain = my_decrypter.apply()
 
         # get dictionary quality of result
@@ -603,16 +605,24 @@ class Solution:
         # get OIC of result
         nb_occ_plain = {ll: plain.count(ll) for ll in ALPHABET}
         overall_coincidence_index_quality = sum([nb_occ_plain[p] * (nb_occ_plain[p] - 1) for p in nb_occ_plain])
-        index_of_coincidence_reached = (len(ALPHABET) * overall_coincidence_index_quality) / (len(CIPHER.cipher_str) * (len(CIPHER.cipher_str) - 1))
+        index_of_coincidence = (len(ALPHABET) * overall_coincidence_index_quality) / (len(CIPHER.cipher_str) * (len(CIPHER.cipher_str) - 1))
 
         # print stuff
         print("=" * 50, file=file_handle)
         print(' '.join(selected_words), file=file_handle)
         print("=" * 50, file=file_handle)
-        print(f"index_of_coincidence_reached={index_of_coincidence_reached} (reference={REF_IOC})", file=file_handle)
+        print(f"index_of_coincidence={index_of_coincidence} (reference={REF_IOC})", file=file_handle)
         print(f"dictionary_quality={dictionary_quality}", file=file_handle)
         print(f"quality=[{self._quality}]", file=file_handle)
         my_decrypter.print_key(file_handle)
+
+        # make a bucket
+        my_bucket = Bucket(False, None)
+        allocation_num = {ll: len(my_decrypter.reverse_table[ll]) if ll in my_decrypter.reverse_table else 0 for ll in ALPHABET}
+        my_bucket.instantiate(allocation_num)
+
+        # show it
+        my_bucket.print_repartition(file_handle)
 
 
 BEST_QUALITY_REACHED: typing.Optional[Evaluation] = None
@@ -785,14 +795,17 @@ class Attacker:
             # up
             succeeded = self._go_up()
             if succeeded:
-                print(f" {self._num}/", end='', flush=True)
+                if VERBOSE:
+                    print(f" {self._num}/", end='', flush=True)
             else:
                 # slightly down
                 succeeded = self._go_slightly_down()
                 if succeeded:
-                    print(f" {self._num}\\", end='', flush=True)
+                    if VERBOSE:
+                        print(f" {self._num}\\", end='', flush=True)
                 else:
-                    print(f" {self._num}-", flush=True)
+                    if VERBOSE:
+                        print(f" {self._num}-", flush=True)
                     return
 
     def _reset_frequencies(self) -> None:
@@ -997,6 +1010,9 @@ def main() -> None:
                     solution.print_solution(file_handle)
             BEST_QUALITY_REACHED = quality_reached
             BUCKET = copy.copy(bucket_used)
+            print("=============================================")
+            print(f"New reference Bucket:")
+            BUCKET.print_repartition(sys.stdout)
 
         # actually these are test modes
         if substitution_mode or hint_file is not None:
@@ -1005,18 +1021,27 @@ def main() -> None:
             continue
 
         # change bucket (always possible)
+
+        # backup first
+        bucket_backup = copy.copy(BUCKET)
+
+        # change
         BUCKET.find_apply_fake_swap()
 
         # show new bucket
         print("=============================================")
-        print("New Bucket:")
+        print(f"New Bucket for process {num_process}:")
         BUCKET.print_repartition(sys.stdout)
         if output_allocations_file is not None:
             with open(output_allocations_file, 'w') as file_handle:
                 BUCKET.print_repartition(file_handle)
 
+        # pass changed bucket to process
         running_process = multiprocessing.Process(target=processed_make_tries, args=(ATTACKER, num_process, result_queue))
         running_process.start()
+
+        # restore backup
+        BUCKET = copy.copy(bucket_backup)
 
 
 if __name__ == '__main__':
