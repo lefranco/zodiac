@@ -27,6 +27,7 @@ import pstats
 
 PROFILE = False
 DEBUG = False
+IMPATIENT = True
 VERBOSE = True
 
 RECURSION_LIMIT = 5000  # default is 1000 - this is only for when putting spaces when displaying plain text
@@ -888,6 +889,12 @@ class Attacker:
 
                 # restart a complete climb from here
                 number_climbs_left = self._number_climbs
+
+                if IMPATIENT:
+                    if VERBOSE:
+                        print("Putative solution below: ")
+                        solution = Solution(quality_reached, key_reached)
+                        solution.print_solution(sys.stdout)
 
             # stop at some point inner hill climb
             number_climbs_left -= 1
