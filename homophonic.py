@@ -1,4 +1,7 @@
-#!/usr/bin/pypy3
+#!/usr/bin/env python3
+
+# issue with multipocessing ?
+#   !/usr/bin/pypy3
 
 
 """
@@ -21,14 +24,15 @@ import copy
 import contextlib
 import pprint
 import secrets  # instead of random
+import multiprocessing
 
 import cProfile
 import pstats
 
 PROFILE = False
 DEBUG = False
-IMPATIENT = True
-VERBOSE = True
+IMPATIENT = False
+
 
 RECURSION_LIMIT = 5000  # default is 1000 - this is only for when putting spaces when displaying plain text
 
@@ -39,7 +43,7 @@ EPSILON_DELTA_FLOAT = 0.000001  # to compare floats (for debug check)
 MAX_SUBSTITUTION_STUFFING = 10
 MAX_BUCKET_SIZE = 99   # keep it to two digit
 
-MAX_ATTACKER_CLIMBS = 3
+MAX_ATTACKER_CLIMBS = 1  # should be more
 
 K_TEMPERATURE_ZERO = 1000.   # by convention keep it that way
 K_TEMPERATURE_REDUCTION = 0.05   # tuned ! - less : too slow - more : not efficient
@@ -441,9 +445,6 @@ class Bucket:
             if sum(self._table.values()) == number_codes:
                 break
 
-        # to remember last fake swap so to undo it
-        self._last_swapped: typing.Optional[typing.Tuple[str, str]] = None
-
     def _do_fake_swap(self, decremented: str, incremented: str) -> None:
         """ swap letters in allocator """
 
@@ -470,50 +471,20 @@ class Bucket:
         frequencies = {ll: bucket_capture_changed[n] / sum_occurences for n, ll in enumerate(ALPHABET)}
         return - sum([abs(frequencies[ll] - LETTERS.freq_table[ll]) for ll in frequencies])
 
-    def find_apply_fake_swap(self) -> bool:
+    def find_apply_fake_swap(self) -> None:
         """ find a new bucket swap return success """
 
         # all possible pseudo swaps
         possibles_swaps = [(d, i) for (d, i) in itertools.permutations(self._table, 2) if self._table[d]]
 
-        # sorted by quality
-        possibles_swaps_sorted = sorted(possibles_swaps, key=lambda s: self._evaluate_fake_swap(s[0], s[1]), reverse=True)
+        # take first best swap
+        decremented, incremented = secrets.choice(possibles_swaps)
 
-        while True:
+        # is it new ?
+        self._do_fake_swap(decremented, incremented)
 
-            # take first best swap
-            decremented, incremented = possibles_swaps_sorted.pop(0)
-
-            # is it new ?
-            self._do_fake_swap(decremented, incremented)
-            new_bucket_capture = tuple(self._table.values())
-            if new_bucket_capture not in self._bucket_tried:
-
-                # show
-                print(f"decremented {decremented} / incremented {incremented}")
-
-                # remember this bucket as done (so not to repeat with it)
-                self._bucket_tried.add(new_bucket_capture)
-
-                # remember so as to undo if necessary
-                self._last_swapped = (decremented, incremented)
-
-                return True
-
-            # undo bucket swap because already done
-            self._do_fake_swap(incremented, decremented)  # pylint: disable=arguments-out-of-order
-
-            # is there any change still possible ?
-            if not possibles_swaps_sorted:
-                self._last_swapped = None
-                print("Cannot do any more bucket change")
-                return False
-
-    def un_swap(self) -> None:
-        """ un_swap """
-        assert self._last_swapped is not None, "Internal error"
-        (decremented, incremented) = self._last_swapped
-        self._do_fake_swap(incremented, decremented)  # pylint: disable=arguments-out-of-order
+        # show
+        print(f"decremented {decremented} / incremented {incremented}")
 
     def print_repartition(self, file_handle: typing.TextIO) -> None:
         """ print_repartition """
@@ -650,11 +621,11 @@ BEST_QUALITY_REACHED: typing.Optional[Evaluation] = None
 class Attacker:
     """ Attacker """
 
-    def __init__(self, verbose: bool) -> None:
+    def __init__(self) -> None:
 
         assert CIPHER is not None
 
-        self._verbose = verbose
+        self._num: typing.Optional[int] = None
 
         # a table for remembering frequencies
         self._n_grams_frequency_quality_table: typing.Dict[str, float] = dict()
@@ -814,17 +785,14 @@ class Attacker:
             # up
             succeeded = self._go_up()
             if succeeded:
-                if self._verbose:
-                    print("/", end='', flush=True)
+                print(f" {self._num}/", end='', flush=True)
             else:
                 # slightly down
                 succeeded = self._go_slightly_down()
                 if succeeded:
-                    if self._verbose:
-                        print("\\", end='', flush=True)
+                    print(f" {self._num}\\", end='', flush=True)
                 else:
-                    if self._verbose:
-                        print("-", flush=True)
+                    print(f" {self._num}-", flush=True)
                     return
 
     def _reset_frequencies(self) -> None:
@@ -852,13 +820,16 @@ class Attacker:
         # simulated annealing
         self._temperature = K_TEMPERATURE_ZERO
 
-    def make_tries(self) -> typing.Tuple[Evaluation, typing.Dict[str, str]]:
+    def make_tries(self, num: int) -> typing.Tuple[Evaluation, typing.Dict[str, str], Bucket, int]:
         """ make tries : this includes  random generator and inner hill climb """
 
         assert ALLOCATOR is not None
         assert DECRYPTER is not None
         assert DICTIONARY is not None
         assert CIPHER is not None
+        assert BUCKET is not None
+
+        self._num = num
 
         # records best quality reached
         best_quality_reached: typing.Optional[Evaluation] = None
@@ -891,15 +862,14 @@ class Attacker:
                 number_climbs_left = self._number_climbs
 
                 if IMPATIENT:
-                    if VERBOSE:
-                        print("Putative solution below: ")
-                        solution = Solution(quality_reached, key_reached)
-                        solution.print_solution(sys.stdout)
+                    print(f"Process {self._num}: Putative solution below: ")
+                    solution = Solution(quality_reached, key_reached)
+                    solution.print_solution(sys.stdout)
 
             # stop at some point inner hill climb
             number_climbs_left -= 1
             if not number_climbs_left:
-                return best_quality_reached, best_key_reached
+                return best_quality_reached, best_key_reached, BUCKET, self._num
 
     def show_speed(self, file_handle: typing.TextIO) -> None:
         """ show speed """
@@ -909,7 +879,7 @@ class Attacker:
         speed = self._n_operations / (now - self._time_climbs_starts)
 
         # print it
-        print(f"Speed is {speed} swaps per sec", file=file_handle)
+        print(f"Process {self._num}: Speed is {speed} swaps per sec", file=file_handle)
 
     @property
     def overall_n_grams_frequency_quality(self) -> float:
@@ -920,10 +890,23 @@ class Attacker:
 ATTACKER: typing.Optional[Attacker] = None
 
 
+def processed_make_tries(attacker: Attacker, num: int, queue: typing.Any) -> None:  # do not type the queue it crashes the program
+    """ processed procedure """
+    try:
+        print(f"Process {num} started.")
+        result = attacker.make_tries(num)
+        attacker.show_speed(sys.stdout)
+        queue.put(result)
+        print(f"Process {num} finished.")
+    except KeyboardInterrupt:
+        print("Ctrl+C detected (in sub process)!")
+
+
 def main() -> None:
     """ main """
 
     parser = argparse.ArgumentParser()
+    parser.add_argument('-p', '--processes', required=True, help='how many processes to use')
     parser.add_argument('-i', '--ioc', required=True, help='input a file with index coincidence for language')
     parser.add_argument('-n', '--ngrams', required=True, help='input a file with frequency table for n_grams (n-letters)')
     parser.add_argument('-d', '--dictionary', required=True, help='input a file with frequency table for words (dictionary) to use')
@@ -935,6 +918,9 @@ def main() -> None:
     parser.add_argument('-H', '--hint_file', required=False, help='file with hint (sizes of buckets) in cipher')
     parser.add_argument('-s', '--substitution_mode', required=False, help='cipher is simple substitution (not homophonic)', action='store_true')
     args = parser.parse_args()
+
+    n_processes = int(args.processes)
+    print(f"INFORMATION: Using {n_processes} processes")
 
     ref_ioc_file = args.ioc
     if ref_ioc_file is not None:
@@ -981,20 +967,25 @@ def main() -> None:
     #  print(f"Allocator='{ALLOCATOR}'")
 
     global ATTACKER
-    verbose = VERBOSE
-    ATTACKER = Attacker(verbose)
-
-    # need to know if there is a swap in bucket to undo
-    swap_done = False
+    ATTACKER = Attacker()
 
     # file to best solution online
     output_solutions_file = args.output_solutions
+
+    result_queue: multiprocessing.Queue[typing.Tuple[Evaluation, typing.Dict[str, str], Bucket, int]] = multiprocessing.Queue()  # pylint: disable=unsubscriptable-object
+
+    for num in range(n_processes):
+        running_process = multiprocessing.Process(target=processed_make_tries, args=(ATTACKER, num, result_queue))
+        running_process.start()
+
+    n_finished = 0
 
     # outer hill climb
     while True:
 
         # inner hill climb (includes random start key generator)
-        quality_reached, key_reached = ATTACKER.make_tries()
+        quality_reached, key_reached, bucket_used, num_process = result_queue.get()
+        n_finished += 1
 
         #  show stuff if beaten global
         global BEST_QUALITY_REACHED
@@ -1005,24 +996,16 @@ def main() -> None:
                 with open(output_solutions_file, 'w') as file_handle:
                     solution.print_solution(file_handle)
             BEST_QUALITY_REACHED = quality_reached
-        else:
-            if swap_done:
-                BUCKET.un_swap()
-
-        # show speed
-        ATTACKER.show_speed(sys.stdout)
+            BUCKET = copy.copy(bucket_used)
 
         # actually these are test modes
         if substitution_mode or hint_file is not None:
-            break
+            if n_finished == n_processes:
+                break
+            continue
 
-        # change bucket if still possible
-        status = BUCKET.find_apply_fake_swap()
-        if not status:
-            break
-
-        # a swap was done
-        swap_done = True
+        # change bucket (always possible)
+        BUCKET.find_apply_fake_swap()
 
         # show new bucket
         print("=============================================")
@@ -1031,6 +1014,9 @@ def main() -> None:
         if output_allocations_file is not None:
             with open(output_allocations_file, 'w') as file_handle:
                 BUCKET.print_repartition(file_handle)
+
+        running_process = multiprocessing.Process(target=processed_make_tries, args=(ATTACKER, num_process, result_queue))
+        running_process.start()
 
 
 if __name__ == '__main__':
