@@ -44,7 +44,7 @@ EPSILON_DELTA_FLOAT = 0.000001  # to compare floats (for debug check)
 MAX_SUBSTITUTION_STUFFING = 10
 MAX_BUCKET_SIZE = 99   # keep it to two digit
 
-MAX_ATTACKER_CLIMBS = 2  
+MAX_ATTACKER_CLIMBS = 2
 
 K_TEMPERATURE_ZERO = 1000.   # by convention keep it that way
 K_TEMPERATURE_REDUCTION = 0.05   # tuned ! - less : too slow - more : not efficient
@@ -333,7 +333,7 @@ class Decrypter:
 
     def allocation(self) -> typing.Dict[str, str]:
         """ exports allocation to rebuild crypter later on """
-        return copy.copy(self._table)
+        return copy.deepcopy(self._table)
 
     def decode_some(self, cipher_part: str) -> str:
         """ decode """
@@ -459,7 +459,7 @@ class Bucket:
 
         assert LETTERS is not None
 
-        table_changed = copy.copy(self._table)
+        table_changed = copy.deepcopy(self._table)
         assert table_changed[decremented]
         table_changed[decremented] -= 1
         table_changed[incremented] += 1
@@ -486,7 +486,7 @@ class Bucket:
 
     def instantiate(self, allocation_num: typing.Dict[str, int]) -> None:
         """ instantiate """
-        self._table = copy.copy(allocation_num)
+        self._table = copy.deepcopy(allocation_num)
 
     def print_repartition(self, file_handle: typing.TextIO) -> None:
         """ print_repartition """
@@ -532,7 +532,7 @@ class Allocator:
         assert CIPHER is not None
         assert BUCKET is not None
 
-        bucket_copy = copy.copy(BUCKET.table)
+        bucket_copy = copy.deepcopy(BUCKET.table)
 
         allocation: typing.Dict[str, str] = dict()
 
@@ -586,7 +586,9 @@ class Solution:
     def __init__(self, quality: Evaluation, the_key: typing.Dict[str, str]) -> None:
 
         self._quality = quality
-        self._the_key = copy.copy(the_key)
+        self._the_key = copy.deepcopy(the_key)
+        now = time.time()
+        self._time_taken = now - START
 
     def print_solution(self, file_handle: typing.TextIO) -> None:
         """ print_solution """
@@ -613,7 +615,8 @@ class Solution:
         print("=" * 50, file=file_handle)
         print(f"index_of_coincidence={index_of_coincidence} (reference={REF_IOC})", file=file_handle)
         print(f"dictionary_quality={dictionary_quality}", file=file_handle)
-        print(f"quality=[{self._quality}]", file=file_handle)
+        print(f"quality={self._quality}", file=file_handle)
+        print(f"time taken={self._time_taken}")
         my_decrypter.print_key(file_handle)
 
         # make a bucket
@@ -991,39 +994,50 @@ def main() -> None:
         running_process = multiprocessing.Process(target=processed_make_tries, args=(ATTACKER, num, result_queue))
         running_process.start()
 
-    n_finished = 0
+    # how many successive climbs without improvement
+    failures = 0
 
     # outer hill climb
     while True:
 
         # inner hill climb (includes random start key generator)
         quality_reached, key_reached, bucket_used, num_process = result_queue.get()
-        n_finished += 1
 
         #  show stuff if beaten global
         global BEST_QUALITY_REACHED
-        if BEST_QUALITY_REACHED is None or quality_reached > BEST_QUALITY_REACHED:
+        if BEST_QUALITY_REACHED is None or quality_reached >= BEST_QUALITY_REACHED:
             solution = Solution(quality_reached, key_reached)
             solution.print_solution(sys.stdout)
             if output_solutions_file is not None:
                 with open(output_solutions_file, 'w') as file_handle:
                     solution.print_solution(file_handle)
             BEST_QUALITY_REACHED = quality_reached
-            BUCKET = copy.copy(bucket_used)
+            BUCKET = copy.deepcopy(bucket_used)
             print("=============================================")
             print(f"New reference Bucket:")
             BUCKET.print_repartition(sys.stdout)
+        else:
+            failures += 1
 
-        # actually these are test modes
-        if substitution_mode or hint_file is not None:
-            if n_finished == n_processes:
-                break
+        # actually this is a test modes
+        if substitution_mode:
+            print(f"Substitution mode, so keep same bucket.")
+            continue
+
+        # actually this is a test modes
+        if hint_file is not None:
+            print(f"Bucket was hinted, so keep same bucket.")
+            continue
+
+        if failures > len(ALPHABET // 2):
+            failures = 0
+            print(f"Seems stable, so keep same bucket.")
             continue
 
         # change bucket (always possible)
 
         # backup first
-        bucket_backup = copy.copy(BUCKET)
+        bucket_backup = copy.deepcopy(BUCKET)
 
         # change
         BUCKET.find_apply_fake_swap()
@@ -1041,7 +1055,7 @@ def main() -> None:
         running_process.start()
 
         # restore backup
-        BUCKET = copy.copy(bucket_backup)
+        BUCKET = copy.deepcopy(bucket_backup)
 
 
 if __name__ == '__main__':
@@ -1054,7 +1068,7 @@ if __name__ == '__main__':
         PR.enable()
 
     # this to know how long it takes
-    BEFORE = time.time()
+    START = time.time()
 
     print("Press Ctrl+C to stop program")
     try:
@@ -1062,8 +1076,8 @@ if __name__ == '__main__':
     except KeyboardInterrupt:
         print("Ctrl+C detected !")
 
-    AFTER = time.time()
-    ELAPSED = AFTER - BEFORE
+    END = time.time()
+    ELAPSED = END - START
     #  how long it took
     print(f"Time taken is {ELAPSED:2.2f}sec.")
 
