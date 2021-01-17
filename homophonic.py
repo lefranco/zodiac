@@ -1053,7 +1053,7 @@ def main() -> None:
 
         # show new bucket
         print("=============================================")
-        print(f"Process {num_process} yields a solution with quality={quality_reached} at speed={speed} swaps per sec using bucket bucket:")
+        print(f"Process {num_process} yields a solution with quality={quality_reached} at speed={speed} swaps per sec using bucket:")
         bucket_used.print_repartition(sys.stdout)
 
         # if beaten global : update and show stuff
