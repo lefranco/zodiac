@@ -573,8 +573,11 @@ class Evaluation:
         """ property """
         return self._n_grams_frequency_quality
 
+    def __eq__(self, other: 'Evaluation') -> bool:
+        return abs(self._n_grams_frequency_quality - other.n_grams_frequency_quality) < EPSILON_DELTA_FLOAT
+
     def __gt__(self, other: 'Evaluation') -> bool:
-        return self._n_grams_frequency_quality > other.n_grams_frequency_quality
+        return self._n_grams_frequency_quality > other.n_grams_frequency_quality + EPSILON_DELTA_FLOAT
 
     def __str__(self) -> str:
         return f"ngram qual={self._n_grams_frequency_quality}"
