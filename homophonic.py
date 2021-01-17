@@ -1008,6 +1008,8 @@ def main() -> None:
         # inner hill climb (includes random start key generator)
         quality_reached, key_reached, bucket_used, num_process = result_queue.get()
 
+        print(f"Process {num_process} yields a solution with quality={quality_reached}")
+
         # if beaten global : update and show stuff
         global BEST_QUALITY_REACHED
         if BEST_QUALITY_REACHED is None or quality_reached > BEST_QUALITY_REACHED or quality_reached == BEST_QUALITY_REACHED:
