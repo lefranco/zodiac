@@ -240,6 +240,9 @@ class Cipher:
 
         assert NGRAMS is not None
 
+        if substitution_mode:
+            print("INFORMATION: Substitution mode")
+
         # the string (as a list) read from cipher file
         self._content: typing.List[str] = list()
         with open(filename) as filepointer:
@@ -618,7 +621,7 @@ class Solution:
         print(f"index_of_coincidence={index_of_coincidence} (reference={REF_IOC})", file=file_handle)
         print(f"dictionary_quality={dictionary_quality}", file=file_handle)
         print(f"quality={self._quality}", file=file_handle)
-        print(f"time taken={self._time_taken}")
+        print(f"time taken={self._time_taken}", file=file_handle)
         my_decrypter.print_key(file_handle)
 
         # make a bucket
@@ -654,7 +657,7 @@ class Attacker:
 
         # to measure speed
         self._n_operations = 0
-        self._time_climbs_starts = time.time()
+        self._time_climbs_starts: typing.Optional[float] = None
 
         # simulated annealing
         self._temperature = 0.
@@ -811,6 +814,7 @@ class Attacker:
                 else:
                     if VERBOSE:
                         print(f" {self._num}-", flush=True)
+
                     print(f"Process {self._num} reached a peak at qual={self._overall_n_grams_frequency_quality}")
                     return
 
@@ -839,7 +843,7 @@ class Attacker:
         # simulated annealing
         self._temperature = K_TEMPERATURE_ZERO
 
-    def make_tries(self, num: int) -> typing.Tuple[Evaluation, typing.Dict[str, str], Bucket, int]:
+    def make_tries(self, num: int) -> typing.Tuple[Evaluation, typing.Dict[str, str], Bucket, float, int]:
         """ make tries : this includes  random generator and inner hill climb """
 
         assert ALLOCATOR is not None
@@ -849,6 +853,9 @@ class Attacker:
         assert BUCKET is not None
 
         self._num = num
+
+        # time before all climbs
+        self._time_climbs_starts = time.time()
 
         # records best quality reached
         best_quality_reached: typing.Optional[Evaluation] = None
@@ -865,6 +872,8 @@ class Attacker:
             self._reset_frequencies()
 
             # start a new session : climb as high as possible
+
+            # actual climb
             self._climb()
 
             quality_ngrams_reached = self._overall_n_grams_frequency_quality
@@ -888,17 +897,11 @@ class Attacker:
             # stop at some point inner hill climb
             number_climbs_left -= 1
             if not number_climbs_left:
-                return best_quality_reached, best_key_reached, BUCKET, self._num
 
-    def show_speed(self, file_handle: typing.TextIO) -> None:
-        """ show speed """
-
-        # get speed
-        now = time.time()
-        speed = self._n_operations / (now - self._time_climbs_starts)
-
-        # print it
-        print(f"Process {self._num} reports a speed={speed} swaps per sec", file=file_handle)
+                # time after all climbs
+                now = time.time()
+                speed = self._n_operations / (now - self._time_climbs_starts)
+                return best_quality_reached, best_key_reached, BUCKET, speed, self._num
 
     @property
     def overall_n_grams_frequency_quality(self) -> float:
@@ -914,7 +917,6 @@ def processed_make_tries(attacker: Attacker, num: int, queue: typing.Any) -> Non
     try:
         print(f"Process {num} started.")
         result = attacker.make_tries(num)
-        attacker.show_speed(sys.stdout)
         queue.put(result)
         print(f"Process {num} finished.")
     except KeyboardInterrupt:
@@ -985,7 +987,7 @@ def main() -> None:
     # file to best solution online
     output_solutions_file = args.output_solutions
 
-    result_queue: multiprocessing.Queue[typing.Tuple[Evaluation, typing.Dict[str, str], Bucket, int]] = multiprocessing.Queue()  # pylint: disable=unsubscriptable-object
+    result_queue: multiprocessing.Queue[typing.Tuple[Evaluation, typing.Dict[str, str], Bucket, float, int]] = multiprocessing.Queue()  # pylint: disable=unsubscriptable-object
 
     for num in range(n_processes):
         running_process = multiprocessing.Process(target=processed_make_tries, args=(ATTACKER, num, result_queue))
@@ -998,11 +1000,11 @@ def main() -> None:
     while True:
 
         # inner hill climb (includes random start key generator)
-        quality_reached, key_reached, bucket_used, num_process = result_queue.get()
+        quality_reached, key_reached, bucket_used, speed, num_process = result_queue.get()
 
         # show new bucket
         print("=============================================")
-        print(f"Process {num_process} yields a solution with quality={quality_reached} using bucket bucket:")
+        print(f"Process {num_process} yields a solution with quality={quality_reached} at speed={speed} using bucket bucket:")
         bucket_used.print_repartition(sys.stdout)
 
         # if beaten global : update and show stuff
@@ -1023,12 +1025,12 @@ def main() -> None:
 
         # actually this is a test mode
         if substitution_mode:
-            print("Substitution mode, so keep same bucket.")
+            #  substitution mode, so keep same bucket
             continue
 
         # actually this is a test mode
         if hint_file is not None:
-            print("Bucket was hinted, so keep same bucket.")
+            #  bucket was hinted, so keep same bucket
             continue
 
         if failures > len(ALPHABET) // 2:
@@ -1041,8 +1043,7 @@ def main() -> None:
         # backup first
         bucket_backup = copy.deepcopy(BUCKET)
 
-        # change
-        print("Let's change bucket a little...")
+        # change bucket a little
         BUCKET.find_apply_fake_swap()
 
         # pass changed bucket to process
