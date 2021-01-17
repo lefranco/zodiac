@@ -481,9 +481,6 @@ class Bucket:
         # is it new ?
         self._do_fake_swap(decremented, incremented)
 
-        # show
-        print(f"decremented {decremented} / incremented {incremented}")
-
     def instantiate(self, allocation_num: typing.Dict[str, int]) -> None:
         """ instantiate """
         self._table = copy.deepcopy(allocation_num)
@@ -814,6 +811,7 @@ class Attacker:
                 else:
                     if VERBOSE:
                         print(f" {self._num}-", flush=True)
+                    print(f"Process {self._num} reached a peak at qual={self._overall_n_grams_frequency_quality}")
                     return
 
     def _reset_frequencies(self) -> None:
@@ -900,7 +898,7 @@ class Attacker:
         speed = self._n_operations / (now - self._time_climbs_starts)
 
         # print it
-        print(f"Process {self._num}: Speed is {speed} swaps per sec", file=file_handle)
+        print(f"Process {self._num} reports a speed={speed} swaps per sec", file=file_handle)
 
     @property
     def overall_n_grams_frequency_quality(self) -> float:
@@ -935,7 +933,6 @@ def main() -> None:
     parser.add_argument('-l', '--letters', required=True, help='input a file with frequency table for letters')
     parser.add_argument('-c', '--cipher', required=True, help='cipher to attack')
     parser.add_argument('-o', '--output_solutions', required=False, help='file where to output successive solutions')
-    parser.add_argument('-O', '--output_allocations', required=False, help='file where to output successive attempted allocations')
     parser.add_argument('-H', '--hint_file', required=False, help='file with hint (sizes of buckets) in cipher')
     parser.add_argument('-s', '--substitution_mode', required=False, help='cipher is simple substitution (not homophonic)', action='store_true')
     args = parser.parse_args()
@@ -972,16 +969,11 @@ def main() -> None:
     global DECRYPTER
     DECRYPTER = Decrypter()
 
-    output_allocations_file = args.output_allocations
-
     hint_file = args.hint_file
     global BUCKET
     BUCKET = Bucket(substitution_mode, hint_file)
     print("Initial Bucket:")
     BUCKET.print_repartition(sys.stdout)
-    if output_allocations_file is not None:
-        with open(output_allocations_file, 'w') as file_handle:
-            BUCKET.print_repartition(file_handle)
 
     global ALLOCATOR
     ALLOCATOR = Allocator(substitution_mode)
@@ -1008,7 +1000,10 @@ def main() -> None:
         # inner hill climb (includes random start key generator)
         quality_reached, key_reached, bucket_used, num_process = result_queue.get()
 
-        print(f"Process {num_process} yields a solution with quality={quality_reached}")
+        # show new bucket
+        print("=============================================")
+        print(f"Process {num_process} yields a solution with quality={quality_reached} using bucket bucket:")
+        bucket_used.print_repartition(sys.stdout)
 
         # if beaten global : update and show stuff
         global BEST_QUALITY_REACHED
@@ -1049,14 +1044,6 @@ def main() -> None:
         # change
         print("Let's change bucket a little...")
         BUCKET.find_apply_fake_swap()
-
-        # show new bucket
-        print("=============================================")
-        print(f"New Bucket for process {num_process}:")
-        BUCKET.print_repartition(sys.stdout)
-        if output_allocations_file is not None:
-            with open(output_allocations_file, 'w') as file_handle:
-                BUCKET.print_repartition(file_handle)
 
         # pass changed bucket to process
         running_process = multiprocessing.Process(target=processed_make_tries, args=(ATTACKER, num_process, result_queue))
