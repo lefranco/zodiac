@@ -10,7 +10,7 @@ CYTHONFLAGS = -3 --cplus --embed
 
 CC = g++
 
-OPT= -Ofast # better than -O3
+OPT= -O3 # -Ofast safe ?
 
 # replace with proper python version here
 CFLAGS = -fPIC $$(python3.8-config --cflags)
