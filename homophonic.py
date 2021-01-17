@@ -573,7 +573,9 @@ class Evaluation:
         """ property """
         return self._n_grams_frequency_quality
 
-    def __eq__(self, other: 'Evaluation') -> bool:
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Evaluation):
+            return NotImplemented
         return abs(self._n_grams_frequency_quality - other.n_grams_frequency_quality) < EPSILON_DELTA_FLOAT
 
     def __gt__(self, other: 'Evaluation') -> bool:
@@ -1006,9 +1008,9 @@ def main() -> None:
         # inner hill climb (includes random start key generator)
         quality_reached, key_reached, bucket_used, num_process = result_queue.get()
 
-        #  show stuff if beaten global
+        # if beaten global : update and show stuff
         global BEST_QUALITY_REACHED
-        if BEST_QUALITY_REACHED is None or quality_reached >= BEST_QUALITY_REACHED:
+        if BEST_QUALITY_REACHED is None or quality_reached > BEST_QUALITY_REACHED or quality_reached == BEST_QUALITY_REACHED:
             solution = Solution(quality_reached, key_reached)
             solution.print_solution(sys.stdout)
             if output_solutions_file is not None:
@@ -1017,24 +1019,24 @@ def main() -> None:
             BEST_QUALITY_REACHED = quality_reached
             BUCKET = copy.deepcopy(bucket_used)
             print("=============================================")
-            print(f"New reference Bucket:")
+            print("New reference Bucket:")
             BUCKET.print_repartition(sys.stdout)
         else:
             failures += 1
 
-        # actually this is a test modes
+        # actually this is a test mode
         if substitution_mode:
-            print(f"Substitution mode, so keep same bucket.")
+            print("Substitution mode, so keep same bucket.")
             continue
 
-        # actually this is a test modes
+        # actually this is a test mode
         if hint_file is not None:
-            print(f"Bucket was hinted, so keep same bucket.")
+            print("Bucket was hinted, so keep same bucket.")
             continue
 
-        if failures > len(ALPHABET // 2):
+        if failures > len(ALPHABET) // 2:
             failures = 0
-            print(f"Seems stable, so keep same bucket.")
+            print("Seems stable, so keep same bucket to have another go with it.")
             continue
 
         # change bucket (always possible)
@@ -1043,6 +1045,7 @@ def main() -> None:
         bucket_backup = copy.deepcopy(BUCKET)
 
         # change
+        print("Let's change bucket a little...")
         BUCKET.find_apply_fake_swap()
 
         # show new bucket
