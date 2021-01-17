@@ -410,6 +410,7 @@ class Bucket:
 
     def __init__(self, substitution_mode: bool, hint_file: typing.Optional[str]) -> None:
 
+        assert LETTERS is not None
         assert CIPHER is not None
 
         if substitution_mode:
@@ -433,14 +434,21 @@ class Bucket:
 
         # standard
 
-        #  how many different codes
+        #  take a note of some letters that have to be there
+        cipher_size = len(CIPHER.cipher_str)
+        forced_table = {ll: LETTERS.freq_table[ll] * cipher_size > 0.5 for ll in sorted(ALPHABET, key=lambda ll: LETTERS.freq_table[ll], reverse=True)}  # type: ignore
+
+        # note how many different codes
         number_codes = len(CIPHER.cipher_codes)
+
         self._table = {ll: 0 for ll in sorted(ALPHABET, key=lambda ll: LETTERS.freq_table[ll], reverse=True)}  # type: ignore
 
         while True:
 
             # criterion is deficit : how many I should have minus how many I have
-            chosen = max(ALPHABET, key=lambda ll: LETTERS.freq_table[ll] * number_codes - self._table[ll])  # type: ignore
+            chosen = max(ALPHABET, key=lambda ll: (forced_table[ll], LETTERS.freq_table[ll] * number_codes - self._table[ll]))  # type: ignore
+
+            forced_table[chosen] = False
             self._table[chosen] += 1
 
             if sum(self._table.values()) == number_codes:
@@ -521,10 +529,42 @@ BUCKET: typing.Optional[Bucket] = None
 
 
 class Allocator:
-    """ Alocator : Makes initial random allocation """
+    """ Allocator : Makes initial allocation """
 
     def __init__(self, substitution_mode: bool) -> None:
         self._substitution_mode = substitution_mode
+
+    def make_herited_key(self, best_key: typing.Dict[str, str]) -> typing.Dict[str, str]:
+        """ Makes a best allocation by copying as much as possible from best existing to start with """
+
+        assert BUCKET is not None
+        assert not self._substitution_mode, "Internal error: make_herited_key() in substitution mode"
+
+        # make a decrypter with the orginal key
+        my_decrypter = Decrypter()
+        my_decrypter.instantiate(best_key)
+        reverse_table = my_decrypter.reverse_table
+
+        # find which letter gains a cipher
+        increment_ones = [ll for ll in ALPHABET if len(reverse_table[ll]) < BUCKET.table[ll]]
+        assert len(increment_ones) == 1
+        increment = increment_ones.pop()
+
+        # find which letter loses a cipher
+        decrement_ones = [ll for ll in ALPHABET if len(reverse_table[ll]) > BUCKET.table[ll]]
+        assert len(decrement_ones) == 1
+        decrement = decrement_ones.pop()
+
+        # pick a cipher to move
+        moved_cipher = str(secrets.choice(list(reverse_table[decrement])))
+
+        # copy key
+        copied_key = copy.deepcopy(best_key)
+
+        # alter key
+        copied_key[moved_cipher] = increment
+
+        return copied_key
 
     def make_random_key(self) -> typing.Dict[str, str]:
         """ Makes a random key to start with """
@@ -631,9 +671,6 @@ class Solution:
 
         # show it
         my_bucket.print_repartition(file_handle)
-
-
-BEST_QUALITY_REACHED: typing.Optional[Evaluation] = None
 
 
 class Attacker:
@@ -843,7 +880,7 @@ class Attacker:
         # simulated annealing
         self._temperature = K_TEMPERATURE_ZERO
 
-    def make_tries(self, num: int) -> typing.Tuple[Evaluation, typing.Dict[str, str], Bucket, float, int]:
+    def make_tries(self, best_key_reached_received: typing.Optional[typing.Dict[str, str]], num: int) -> typing.Tuple[Evaluation, typing.Dict[str, str], Bucket, float, int]:
         """ make tries : this includes  random generator and inner hill climb """
 
         assert ALLOCATOR is not None
@@ -862,10 +899,20 @@ class Attacker:
 
         # limit the number of climbs
         number_climbs_left = self._number_climbs
+
         while True:
 
-            # random key
-            initial_key = ALLOCATOR.make_random_key()
+            if best_key_reached_received is not None:
+                # inherited allocation
+                print(f"Process {self._num} re uses the best key received for climbs left={number_climbs_left}")
+                initial_key = ALLOCATOR.make_herited_key(best_key_reached_received)
+                # next time forget it (use it once)
+                best_key_reached_received = None
+            else:
+                # pure random allocation
+                print(f"Process {self._num} uses a random key for climbs left={number_climbs_left}")
+                initial_key = ALLOCATOR.make_random_key()
+
             DECRYPTER.instantiate(initial_key)
 
             # reset frequency tables from new allocation
@@ -886,7 +933,7 @@ class Attacker:
                 best_quality_reached = quality_reached
                 best_key_reached = key_reached
 
-                # restart a complete climb from here
+                # restart a complete climb from here (removed)
                 number_climbs_left = self._number_climbs
 
                 if IMPATIENT:
@@ -912,11 +959,11 @@ class Attacker:
 ATTACKER: typing.Optional[Attacker] = None
 
 
-def processed_make_tries(attacker: Attacker, num: int, queue: typing.Any) -> None:  # do not type the queue it crashes the program
+def processed_make_tries(attacker: Attacker, best_key_reached: typing.Optional[typing.Dict[str, str]], num: int, queue: typing.Any) -> None:  # do not type the queue it crashes the program
     """ processed procedure """
     try:
         print(f"Process {num} started.")
-        result = attacker.make_tries(num)
+        result = attacker.make_tries(best_key_reached, num)
         queue.put(result)
         print(f"Process {num} finished.")
     except KeyboardInterrupt:
@@ -990,8 +1037,10 @@ def main() -> None:
     result_queue: multiprocessing.Queue[typing.Tuple[Evaluation, typing.Dict[str, str], Bucket, float, int]] = multiprocessing.Queue()  # pylint: disable=unsubscriptable-object
 
     for num in range(n_processes):
-        running_process = multiprocessing.Process(target=processed_make_tries, args=(ATTACKER, num, result_queue))
+        running_process = multiprocessing.Process(target=processed_make_tries, args=(ATTACKER, None, num, result_queue))
         running_process.start()
+
+    best_quality_reached: typing.Optional[Evaluation] = None
 
     # how many successive climbs without improvement
     failures = 0
@@ -1008,14 +1057,14 @@ def main() -> None:
         bucket_used.print_repartition(sys.stdout)
 
         # if beaten global : update and show stuff
-        global BEST_QUALITY_REACHED
-        if BEST_QUALITY_REACHED is None or quality_reached > BEST_QUALITY_REACHED or quality_reached == BEST_QUALITY_REACHED:
+        if best_quality_reached is None or quality_reached > best_quality_reached or quality_reached == best_quality_reached:
             solution = Solution(quality_reached, key_reached)
             solution.print_solution(sys.stdout)
             if output_solutions_file is not None:
                 with open(output_solutions_file, 'w') as file_handle:
                     solution.print_solution(file_handle)
-            BEST_QUALITY_REACHED = quality_reached
+            best_quality_reached = quality_reached
+            best_key_reached = key_reached
             BUCKET = copy.deepcopy(bucket_used)
             print("=============================================")
             print("New reference Bucket:")
@@ -1047,7 +1096,7 @@ def main() -> None:
         BUCKET.find_apply_fake_swap()
 
         # pass changed bucket to process
-        running_process = multiprocessing.Process(target=processed_make_tries, args=(ATTACKER, num_process, result_queue))
+        running_process = multiprocessing.Process(target=processed_make_tries, args=(ATTACKER, best_key_reached, num_process, result_queue))
         running_process.start()
 
         # restore backup
