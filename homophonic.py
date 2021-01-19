@@ -44,7 +44,7 @@ EPSILON_DELTA_FLOAT = 0.000001  # to compare floats (for debug check)
 MAX_SUBSTITUTION_STUFFING = 10
 MAX_BUCKET_SIZE = 99   # keep it to two digit
 
-MAX_ATTACKER_CLIMBS = 2
+MAX_ATTACKER_CLIMBS = 3
 
 K_TEMPERATURE_ZERO = 1000.   # by convention keep it that way
 K_TEMPERATURE_REDUCTION = 0.05   # tuned ! - less : too slow - more : not efficient
@@ -959,10 +959,35 @@ class Attacker:
 ATTACKER: typing.Optional[Attacker] = None
 
 
-def processed_make_tries(attacker: Attacker, best_key_reached: typing.Optional[typing.Dict[str, str]], num: int, queue: typing.Any) -> None:  # do not type the queue it crashes the program
+class ContextRecord(typing.NamedTuple):
+    """ Windows : no fork so pass the whole context """
+    letters: Letters
+    ngrams: Ngrams
+    dictionary: Dictionary
+    cipher: Cipher
+    decrypter: Decrypter
+    bucket: Bucket
+    allocator: Allocator
+
+
+def processed_make_tries(attacker: Attacker, best_key_reached: typing.Optional[typing.Dict[str, str]], context: ContextRecord, num: int, queue: typing.Any) -> None:  # do not type the queue it crashes the program
     """ processed procedure """
     try:
         print(f"Process {num} started.")
+        global LETTERS
+        LETTERS = context.letters
+        global NGRAMS
+        NGRAMS = context.ngrams
+        global DICTIONARY
+        DICTIONARY = context.dictionary
+        global CIPHER
+        CIPHER = context.cipher
+        global DECRYPTER
+        DECRYPTER = context.decrypter
+        global BUCKET
+        BUCKET = context.bucket
+        global ALLOCATOR
+        ALLOCATOR = context.allocator
         result = attacker.make_tries(best_key_reached, num)
         queue.put(result)
         print(f"Process {num} finished.")
@@ -1037,7 +1062,12 @@ def main() -> None:
     result_queue: multiprocessing.Queue[typing.Tuple[Evaluation, typing.Dict[str, str], Bucket, float, int]] = multiprocessing.Queue()  # pylint: disable=unsubscriptable-object
 
     for num in range(n_processes):
-        running_process = multiprocessing.Process(target=processed_make_tries, args=(ATTACKER, None, num, result_queue))
+
+        # copy all globals in context and pass them over (for windows)
+        context = ContextRecord(letters=LETTERS, ngrams=NGRAMS, dictionary=DICTIONARY, cipher=CIPHER, decrypter=DECRYPTER, bucket=BUCKET, allocator=ALLOCATOR)
+
+        # start process
+        running_process = multiprocessing.Process(target=processed_make_tries, args=(ATTACKER, None, context, num, result_queue))
         running_process.start()
 
     best_quality_reached: typing.Optional[Evaluation] = None
@@ -1095,12 +1125,18 @@ def main() -> None:
         # change bucket a little
         BUCKET.find_apply_fake_swap()
 
+        # copy all globals in context and pass them over (for windows)
+        context = ContextRecord(letters=LETTERS, ngrams=NGRAMS, dictionary=DICTIONARY, cipher=CIPHER, decrypter=DECRYPTER, bucket=BUCKET, allocator=ALLOCATOR)
+
         # pass changed bucket to process
-        running_process = multiprocessing.Process(target=processed_make_tries, args=(ATTACKER, best_key_reached, num_process, result_queue))
+        running_process = multiprocessing.Process(target=processed_make_tries, args=(ATTACKER, best_key_reached, context, num_process, result_queue))
         running_process.start()
 
         # restore backup
         BUCKET = copy.deepcopy(bucket_backup)
+
+        print("Reference Bucket for info:")
+        BUCKET.print_repartition(sys.stdout)
 
 
 if __name__ == '__main__':
