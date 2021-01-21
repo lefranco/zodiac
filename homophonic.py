@@ -405,196 +405,22 @@ class Decrypter:
 DECRYPTER: typing.Optional[Decrypter] = None
 
 
-class Bucket:
-    """ A bucket : says how many ciphers could be allocated to every alphabet letter """
-
-    def __init__(self, substitution_mode: bool, hint_file: typing.Optional[str]) -> None:
-
-        assert LETTERS is not None
-        assert CIPHER is not None
-
-        if substitution_mode:
-
-            assert hint_file is None, "There cannot be a hint file in substitution mode"
-            self._table = {ll: 1 for ll in sorted(ALPHABET, key=lambda ll: LETTERS.freq_table[ll], reverse=True)}  # type: ignore
-            return
-
-        if hint_file is not None:
-
-            with open(hint_file) as filepointer:
-                for num, line in enumerate(filepointer):
-                    line = line.rstrip('\n')
-                    if num in [0, 3]:
-                        assert line == '-' * len(ALPHABET), f"Incorrect hint file line {num+1}"
-                    elif num == 1:
-                        assert line == ''.join(ALPHABET), f"Incorrect hint file line {num+1}"
-                    elif num == 2:
-                        self._table = {ll: int(line[n]) if line[n] != ' ' else 0 for n, ll in enumerate(ALPHABET)}
-            return
-
-        # standard
-
-        #  take a note of some letters that have to be there
-        cipher_size = len(CIPHER.cipher_str)
-        forced_table = {ll: LETTERS.freq_table[ll] * cipher_size > 0.5 for ll in sorted(ALPHABET, key=lambda ll: LETTERS.freq_table[ll], reverse=True)}  # type: ignore
-
-        # note how many different codes
-        number_codes = len(CIPHER.cipher_codes)
-
-        self._table = {ll: 0 for ll in sorted(ALPHABET, key=lambda ll: LETTERS.freq_table[ll], reverse=True)}  # type: ignore
-
-        while True:
-
-            # criterion is deficit : how many I should have minus how many I have
-            chosen = max(ALPHABET, key=lambda ll: (forced_table[ll], LETTERS.freq_table[ll] * number_codes - self._table[ll]))  # type: ignore
-
-            forced_table[chosen] = False
-            self._table[chosen] += 1
-
-            if sum(self._table.values()) == number_codes:
-                break
-
-    def _do_fake_swap(self, decremented: str, incremented: str) -> None:
-        """ swap letters in allocator """
-
-        # just a little check
-        assert incremented != decremented, "Internal error"
-
-        assert self._table[decremented], "Internal error"
-        self._table[decremented] -= 1
-        self._table[incremented] += 1
-        assert self._table[incremented] <= MAX_BUCKET_SIZE, f"Cannot handle buckets with more than {MAX_BUCKET_SIZE} capacity"
-
-    def _evaluate_fake_swap(self, decremented: str, incremented: str) -> float:
-        """ evaluate swap letters in allocator """
-
-        assert LETTERS is not None
-
-        table_changed = copy.deepcopy(self._table)
-        assert table_changed[decremented]
-        table_changed[decremented] -= 1
-        table_changed[incremented] += 1
-        bucket_capture_changed = tuple(table_changed.values())
-
-        sum_occurences = sum(bucket_capture_changed)
-        frequencies = {ll: bucket_capture_changed[n] / sum_occurences for n, ll in enumerate(ALPHABET)}
-        return - sum([abs(frequencies[ll] - LETTERS.freq_table[ll]) for ll in frequencies])
-
-    def find_apply_fake_swap(self) -> None:
-        """ find a new bucket swap return success """
-
-        # all possible pseudo swaps
-        possibles_swaps = [(d, i) for (d, i) in itertools.permutations(self._table, 2) if self._table[d]]
-
-        # take first best swap
-        decremented, incremented = secrets.choice(possibles_swaps)
-
-        # is it new ?
-        self._do_fake_swap(decremented, incremented)
-
-    def instantiate(self, allocation_num: typing.Dict[str, int]) -> None:
-        """ instantiate """
-        self._table = copy.deepcopy(allocation_num)
-
-    def print_repartition(self, file_handle: typing.TextIO) -> None:
-        """ print_repartition """
-
-        with contextlib.redirect_stdout(file_handle):
-            print("." * len(ALPHABET))
-            print(''.join(ALPHABET))
-            for letter in ALPHABET:
-                number = self._table[letter]
-                if number:
-                    print(number % 10, end='')
-                else:
-                    print(' ', end='')
-            print()
-            if any([n > 9 for n in self._table.values()]):
-                for letter in ALPHABET:
-                    number = self._table[letter]
-                    if number // 10:
-                        print(number // 10, end='')
-                    else:
-                        print(' ', end='')
-                print()
-            print("." * len(ALPHABET))
-
-    @property
-    def table(self) -> typing.Dict[str, int]:
-        """ property """
-        return self._table
-
-
-BUCKET: typing.Optional[Bucket] = None
-
-
 class Allocator:
     """ Allocator : Makes initial allocation """
 
     def __init__(self, substitution_mode: bool) -> None:
         self._substitution_mode = substitution_mode
 
-    def make_herited_key(self, best_key: typing.Dict[str, str]) -> typing.Dict[str, str]:
-        """ Makes a best allocation by copying as much as possible from best existing to start with """
-
-        assert BUCKET is not None
-        assert not self._substitution_mode, "Internal error: make_herited_key() in substitution mode"
-
-        # make a decrypter with the orginal key
-        my_decrypter = Decrypter()
-        my_decrypter.instantiate(best_key)
-        reverse_table = my_decrypter.reverse_table
-
-        # find which letter gains a cipher
-        increment_ones = [ll for ll in ALPHABET if len(reverse_table[ll]) < BUCKET.table[ll]]
-        assert len(increment_ones) == 1
-        increment = increment_ones.pop()
-
-        # find which letter loses a cipher
-        decrement_ones = [ll for ll in ALPHABET if len(reverse_table[ll]) > BUCKET.table[ll]]
-        assert len(decrement_ones) == 1
-        decrement = decrement_ones.pop()
-
-        # pick a cipher to move
-        moved_cipher = str(secrets.choice(list(reverse_table[decrement])))
-
-        # copy key
-        copied_key = copy.deepcopy(best_key)
-
-        # alter key
-        copied_key[moved_cipher] = increment
-
-        return copied_key
-
     def make_random_key(self) -> typing.Dict[str, str]:
         """ Makes a random key to start with """
 
         assert CIPHER is not None
-        assert BUCKET is not None
-
-        bucket_copy = copy.deepcopy(BUCKET.table)
 
         allocation: typing.Dict[str, str] = dict()
 
         for cipher in CIPHER.cipher_codes:
-            letter_selected = secrets.choice([ll for ll in bucket_copy if bucket_copy[ll]])
+            letter_selected = secrets.choice(ALPHABET)
             allocation[cipher] = letter_selected
-            bucket_copy[letter_selected] -= 1
-
-        if self._substitution_mode and len(allocation) < len(ALPHABET):
-            stuffing = sorted(set(ALPHABET) - set(allocation.values()))
-            assert len(stuffing) <= MAX_SUBSTITUTION_STUFFING, "Too few different characters in substitution cipher"
-            num = 0
-            while True:
-                letter_selected = secrets.choice(stuffing)
-                stuffing.remove(letter_selected)
-                allocation[f'{num}'] = letter_selected
-                bucket_copy[letter_selected] -= 1
-                num += 1
-                if not stuffing:
-                    break
-
-        assert all([bucket_copy[ll] == 0 for ll in bucket_copy]), "Internal error"
 
         return allocation
 
@@ -663,14 +489,6 @@ class Solution:
         print(f"quality={self._quality}", file=file_handle)
         print(f"time taken={self._time_taken}", file=file_handle)
         my_decrypter.print_key(file_handle)
-
-        # make a bucket
-        my_bucket = Bucket(False, None)
-        allocation_num = {ll: len(my_decrypter.reverse_table[ll]) if ll in my_decrypter.reverse_table else 0 for ll in ALPHABET}
-        my_bucket.instantiate(allocation_num)
-
-        # show it
-        my_bucket.print_repartition(file_handle)
 
 
 class Attacker:
@@ -880,14 +698,13 @@ class Attacker:
         # simulated annealing
         self._temperature = K_TEMPERATURE_ZERO
 
-    def make_tries(self, best_key_reached_received: typing.Optional[typing.Dict[str, str]], num: int) -> typing.Tuple[Evaluation, typing.Dict[str, str], Bucket, float, int]:
+    def make_tries(self, num: int) -> typing.Tuple[Evaluation, typing.Dict[str, str], float, int]:
         """ make tries : this includes  random generator and inner hill climb """
 
         assert ALLOCATOR is not None
         assert DECRYPTER is not None
         assert DICTIONARY is not None
         assert CIPHER is not None
-        assert BUCKET is not None
 
         self._num = num
 
@@ -902,16 +719,9 @@ class Attacker:
 
         while True:
 
-            if best_key_reached_received is not None:
-                # inherited allocation
-                print(f"Process {self._num} re uses the best key received for climbs left={number_climbs_left}")
-                initial_key = ALLOCATOR.make_herited_key(best_key_reached_received)
-                # next time forget it (use it once)
-                best_key_reached_received = None
-            else:
-                # pure random allocation
-                print(f"Process {self._num} uses a random key for climbs left={number_climbs_left}")
-                initial_key = ALLOCATOR.make_random_key()
+            # pure random allocation
+            print(f"Process {self._num} uses a random key for climbs left={number_climbs_left}")
+            initial_key = ALLOCATOR.make_random_key()
 
             DECRYPTER.instantiate(initial_key)
 
@@ -948,7 +758,7 @@ class Attacker:
                 # time after all climbs
                 now = time.time()
                 speed = self._n_operations / (now - self._time_climbs_starts)
-                return best_quality_reached, best_key_reached, BUCKET, speed, self._num
+                return best_quality_reached, best_key_reached, speed, self._num
 
     @property
     def overall_n_grams_frequency_quality(self) -> float:
@@ -966,11 +776,10 @@ class ContextRecord(typing.NamedTuple):
     dictionary: Dictionary
     cipher: Cipher
     decrypter: Decrypter
-    bucket: Bucket
     allocator: Allocator
 
 
-def processed_make_tries(attacker: Attacker, best_key_reached: typing.Optional[typing.Dict[str, str]], context: ContextRecord, num: int, queue: typing.Any) -> None:  # do not type the queue it crashes the program
+def processed_make_tries(attacker: Attacker, context: ContextRecord, num: int, queue: typing.Any) -> None:  # do not type the queue it crashes the program
     """ processed procedure """
     try:
         print(f"Process {num} started.")
@@ -984,11 +793,9 @@ def processed_make_tries(attacker: Attacker, best_key_reached: typing.Optional[t
         CIPHER = context.cipher
         global DECRYPTER
         DECRYPTER = context.decrypter
-        global BUCKET
-        BUCKET = context.bucket
         global ALLOCATOR
         ALLOCATOR = context.allocator
-        result = attacker.make_tries(best_key_reached, num)
+        result = attacker.make_tries(num)
         queue.put(result)
         print(f"Process {num} finished.")
     except KeyboardInterrupt:
@@ -1007,7 +814,6 @@ def main() -> None:
     parser.add_argument('-l', '--letters', required=True, help='input a file with frequency table for letters')
     parser.add_argument('-c', '--cipher', required=True, help='cipher to attack')
     parser.add_argument('-o', '--output_solutions', required=False, help='file where to output successive solutions')
-    parser.add_argument('-H', '--hint_file', required=False, help='file with hint (sizes of buckets) in cipher')
     parser.add_argument('-s', '--substitution_mode', required=False, help='cipher is simple substitution (not homophonic)', action='store_true')
     args = parser.parse_args()
 
@@ -1043,12 +849,6 @@ def main() -> None:
     global DECRYPTER
     DECRYPTER = Decrypter()
 
-    hint_file = args.hint_file
-    global BUCKET
-    BUCKET = Bucket(substitution_mode, hint_file)
-    print("Initial Bucket:")
-    BUCKET.print_repartition(sys.stdout)
-
     global ALLOCATOR
     ALLOCATOR = Allocator(substitution_mode)
     #  print(f"Allocator='{ALLOCATOR}'")
@@ -1059,32 +859,28 @@ def main() -> None:
     # file to best solution online
     output_solutions_file = args.output_solutions
 
-    result_queue: multiprocessing.Queue[typing.Tuple[Evaluation, typing.Dict[str, str], Bucket, float, int]] = multiprocessing.Queue()  # pylint: disable=unsubscriptable-object
+    result_queue: multiprocessing.Queue[typing.Tuple[Evaluation, typing.Dict[str, str], float, int]] = multiprocessing.Queue()  # pylint: disable=unsubscriptable-object
 
     for num in range(n_processes):
 
         # copy all globals in context and pass them over (for windows)
-        context = ContextRecord(letters=LETTERS, ngrams=NGRAMS, dictionary=DICTIONARY, cipher=CIPHER, decrypter=DECRYPTER, bucket=BUCKET, allocator=ALLOCATOR)
+        context = ContextRecord(letters=LETTERS, ngrams=NGRAMS, dictionary=DICTIONARY, cipher=CIPHER, decrypter=DECRYPTER, allocator=ALLOCATOR)
 
         # start process
-        running_process = multiprocessing.Process(target=processed_make_tries, args=(ATTACKER, None, context, num, result_queue))
+        running_process = multiprocessing.Process(target=processed_make_tries, args=(ATTACKER, context, num, result_queue))
         running_process.start()
 
     best_quality_reached: typing.Optional[Evaluation] = None
-
-    # how many successive climbs without improvement
-    failures = 0
 
     # outer hill climb
     while True:
 
         # inner hill climb (includes random start key generator)
-        quality_reached, key_reached, bucket_used, speed, num_process = result_queue.get()
+        quality_reached, key_reached, speed, num_process = result_queue.get()
 
         # show new bucket
         print("=============================================")
-        print(f"Process {num_process} yields a solution with quality={quality_reached} at speed={speed} swaps per sec using bucket:")
-        bucket_used.print_repartition(sys.stdout)
+        print(f"Process {num_process} yields a solution with quality={quality_reached} at speed={speed} swaps per sec")
 
         # if beaten global : update and show stuff
         if best_quality_reached is None or quality_reached > best_quality_reached or quality_reached == best_quality_reached:
@@ -1094,49 +890,13 @@ def main() -> None:
                 with open(output_solutions_file, 'w') as file_handle:
                     solution.print_solution(file_handle)
             best_quality_reached = quality_reached
-            best_key_reached = key_reached
-            BUCKET = copy.deepcopy(bucket_used)
-            print("=============================================")
-            print("New reference Bucket:")
-            BUCKET.print_repartition(sys.stdout)
-        else:
-            failures += 1
-
-        # actually this is a test mode
-        if substitution_mode:
-            #  substitution mode, so keep same bucket
-            continue
-
-        # actually this is a test mode
-        if hint_file is not None:
-            #  bucket was hinted, so keep same bucket
-            continue
-
-        if failures > len(ALPHABET) // 2:
-            failures = 0
-            print("Seems stable, so keep same bucket to have another go with it.")
-            continue
-
-        # change bucket (always possible)
-
-        # backup first
-        bucket_backup = copy.deepcopy(BUCKET)
-
-        # change bucket a little
-        BUCKET.find_apply_fake_swap()
 
         # copy all globals in context and pass them over (for windows)
-        context = ContextRecord(letters=LETTERS, ngrams=NGRAMS, dictionary=DICTIONARY, cipher=CIPHER, decrypter=DECRYPTER, bucket=BUCKET, allocator=ALLOCATOR)
+        context = ContextRecord(letters=LETTERS, ngrams=NGRAMS, dictionary=DICTIONARY, cipher=CIPHER, decrypter=DECRYPTER, allocator=ALLOCATOR)
 
         # pass changed bucket to process
-        running_process = multiprocessing.Process(target=processed_make_tries, args=(ATTACKER, best_key_reached, context, num_process, result_queue))
+        running_process = multiprocessing.Process(target=processed_make_tries, args=(ATTACKER, context, num_process, result_queue))
         running_process.start()
-
-        # restore backup
-        BUCKET = copy.deepcopy(bucket_backup)
-
-        print("Reference Bucket for info:")
-        BUCKET.print_repartition(sys.stdout)
 
 
 if __name__ == '__main__':
