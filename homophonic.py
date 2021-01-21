@@ -764,7 +764,11 @@ class ContextRecord(typing.NamedTuple):
 def processed_make_tries(attacker: Attacker, context: ContextRecord, num: int, queue: typing.Any) -> None:  # do not type the queue it crashes the program
     """ processed procedure """
     try:
+
+        # status
         print(f"Process {num} started.")
+
+        # import globals
         global LETTERS
         LETTERS = context.letters
         global NGRAMS
@@ -775,9 +779,16 @@ def processed_make_tries(attacker: Attacker, context: ContextRecord, num: int, q
         CIPHER = context.cipher
         global DECRYPTER
         DECRYPTER = context.decrypter
+
+        # run
         result = attacker.make_tries(num)
+
+        # export result
         queue.put(result)
+
+        # status
         print(f"Process {num} finished.")
+
     except KeyboardInterrupt:
         print("Ctrl+C detected (in sub process)!")
 
