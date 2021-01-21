@@ -19,7 +19,6 @@ import collections
 import typing
 import math
 import functools
-import itertools
 import copy
 import contextlib
 import pprint
@@ -36,6 +35,7 @@ VERBOSE = False
 
 
 RECURSION_LIMIT = 5000  # default is 1000 - this is only for when putting spaces when displaying plain text
+VERY_BAD_DICTIONNARY = - 1e99
 
 ALPHABET = [chr(i) for i in range(ord('a'), ord('z') + 1)]  # plain always lower case
 EPSILON_NO_OCCURENCES = 1e-99  # zero has - infinite as log, must be << 1
@@ -220,7 +220,10 @@ class Dictionary:
             candidates = [[first] + segment_rec(rest) for first, rest in splits(text)]
             return max(candidates, key=words_probability)
 
-        best_words = segment_rec(plain)
+        try:
+            best_words = segment_rec(plain)
+        except RecursionError:
+            return VERY_BAD_DICTIONNARY, ["(garbage presumed)"]
         return words_probability(best_words), best_words
 
     def __str__(self) -> str:
@@ -345,28 +348,26 @@ class Decrypter:
         assert CIPHER is not None
         return self.decode_some(CIPHER.cipher_str)
 
-    def swap(self, cipher1: str, cipher2: str) -> None:
+    def move(self, cipher: str, plain_dest: str) -> None:
         """ swap  """
 
-        # note the plains
-        plain1 = self._table[cipher1]
-        plain2 = self._table[cipher2]
+        # plain_from
+        plain_from = self._table[cipher]
 
         # just a little check
-        assert plain1 != plain2, "Internal error"
+        assert plain_from != plain_dest, "Internal error"
 
-        # swap
-        self._table[cipher1], self._table[cipher2] = self._table[cipher2], self._table[cipher1]
+        # change table
+        self._table[cipher] = plain_dest
 
-        # move ciphers in table from plain
+        # change reverse table
+        self._reverse_table[plain_from].remove(cipher)
+        self._reverse_table[plain_dest].add(cipher)
 
-        # cipĥer1
-        self._reverse_table[plain1].remove(cipher1)
-        self._reverse_table[plain2].add(cipher1)
-
-        # cipĥer2
-        self._reverse_table[plain2].remove(cipher2)
-        self._reverse_table[plain1].add(cipher2)
+        # update self._allocated
+        self._allocated.add(plain_dest)
+        if not self._reverse_table[plain_from]:
+            self._allocated.remove(plain_from)
 
     def print_key(self, file_handle: typing.TextIO) -> None:
         """ print_key """
@@ -520,34 +521,36 @@ class Attacker:
 
         assert abs(qcheck - self._overall_n_grams_frequency_quality) < EPSILON_DELTA_FLOAT, "Debug mode detected an error for N-Gram freq"
 
-    def _swap(self, cipher1: str, cipher2: str) -> None:
-        """ swap: this is where most CPU time is spent in the program """
+    def _move(self, cipher: str, plain_dest: str) -> None:
+        """ move: this is where most CPU time is spent in the program """
 
         assert NGRAMS is not None
         assert CIPHER is not None
         assert DECRYPTER is not None
 
-        DECRYPTER.swap(cipher1, cipher2)
+        # actual move
+        DECRYPTER.move(cipher, plain_dest)
 
         # effect
+        for n_gram in CIPHER.n_grams_localization_table[cipher]:
 
-        for cipher in cipher1, cipher2:
-            for n_gram in CIPHER.n_grams_localization_table[cipher]:
+            # old value
+            old_value = self._n_grams_frequency_quality_table[n_gram]
 
-                # value obliterated
-                self._overall_n_grams_frequency_quality -= self._n_grams_frequency_quality_table[n_gram]
+            # value obliterated
+            self._overall_n_grams_frequency_quality -= old_value
 
-                # new plain
-                plain = DECRYPTER.decode_some(n_gram)
+            # new plain
+            plain = DECRYPTER.decode_some(n_gram)
 
-                # new value
-                new_value = NGRAMS.log_freq_table.get(plain, NGRAMS.worst_frequency) * CIPHER.n_grams_number_occurence_table[n_gram]
+            # new value
+            new_value = NGRAMS.log_freq_table.get(plain, NGRAMS.worst_frequency) * CIPHER.n_grams_number_occurence_table[n_gram]
 
-                # remembered
-                self._n_grams_frequency_quality_table[n_gram] = new_value
+            # remembered
+            self._n_grams_frequency_quality_table[n_gram] = new_value
 
-                # summed
-                self._overall_n_grams_frequency_quality += new_value
+            # summed
+            self._overall_n_grams_frequency_quality += new_value
 
         # to measure speed
         self._n_operations += 1
@@ -564,19 +567,22 @@ class Attacker:
 
         assert DECRYPTER is not None
 
-        neighbours = {(c1, c2) for (p1, p2) in itertools.combinations(DECRYPTER.allocated, 2) for c1 in DECRYPTER.reverse_table[p1] for c2 in DECRYPTER.reverse_table[p2]}
+        # p_f in allocated (a cipher)
+        # p_t in alphabet but distinct
+        # c in cipehrs coding p_f
+        neighbours = {(c, p_f, p_t) for p_f in DECRYPTER.allocated for p_t in set(ALPHABET) - set([p_f]) for c in DECRYPTER.reverse_table[p_f]}
 
         while True:
 
             # take a random neighbour
             neighbour = secrets.choice(list(neighbours))
-            cipher1, cipher2 = neighbour
+            cipher_moved, plain_from, plain_dest = neighbour
 
             # keep a note of quality before change
             old_overall_n_grams_frequency_quality = self._overall_n_grams_frequency_quality
 
             # apply change now
-            self._swap(cipher1, cipher2)
+            self._move(cipher_moved, plain_dest)
 
             # quality should lower in this context
             assert self._overall_n_grams_frequency_quality <= old_overall_n_grams_frequency_quality
@@ -589,7 +595,7 @@ class Attacker:
                 return True
 
             # not selected so undo
-            self._swap(cipher1, cipher2)
+            self._move(cipher_moved, plain_from)
             return False
 
     def _go_up(self) -> bool:
@@ -598,14 +604,17 @@ class Attacker:
         assert CIPHER is not None
         assert DECRYPTER is not None
 
-        neighbours = {(c1, c2) for (p1, p2) in itertools.combinations(DECRYPTER.allocated, 2) for c1 in DECRYPTER.reverse_table[p1] for c2 in DECRYPTER.reverse_table[p2]}
+        # p_f in allocated (a cipher)
+        # p_t in alphabet but distinct
+        # c in cipehrs coding p_f
+        neighbours = {(c, p_f, p_t) for p_f in DECRYPTER.allocated for p_t in set(ALPHABET) - set([p_f]) for c in DECRYPTER.reverse_table[p_f]}
 
         while True:
 
             # take a random neighbour
             neighbour = secrets.choice(list(neighbours))
             neighbours.remove(neighbour)
-            cipher1, cipher2 = neighbour
+            cipher_moved, plain_from, plain_dest = neighbour
 
             # -----------------------
             #  does the change improve things ?
@@ -615,7 +624,7 @@ class Attacker:
             old_overall_n_grams_frequency_quality = self._overall_n_grams_frequency_quality
 
             # apply change now
-            self._swap(cipher1, cipher2)
+            self._move(cipher_moved, plain_dest)
 
             if DEBUG:
                 self._check_n_gram_frequency_quality()
@@ -626,7 +635,7 @@ class Attacker:
                 return True
 
             # no improvement so undo
-            self._swap(cipher1, cipher2)
+            self._move(cipher_moved, plain_from)
 
             if not neighbours:
                 return False
@@ -759,6 +768,7 @@ class ContextRecord(typing.NamedTuple):
     dictionary: Dictionary
     cipher: Cipher
     decrypter: Decrypter
+    start: float
 
 
 def processed_make_tries(attacker: Attacker, context: ContextRecord, num: int, queue: typing.Any) -> None:  # do not type the queue it crashes the program
@@ -779,6 +789,8 @@ def processed_make_tries(attacker: Attacker, context: ContextRecord, num: int, q
         CIPHER = context.cipher
         global DECRYPTER
         DECRYPTER = context.decrypter
+        global START
+        START = context.start
 
         # run
         result = attacker.make_tries(num)
@@ -851,7 +863,7 @@ def main() -> None:
     for num in range(n_processes):
 
         # copy all globals in context and pass them over (for windows)
-        context = ContextRecord(letters=LETTERS, ngrams=NGRAMS, dictionary=DICTIONARY, cipher=CIPHER, decrypter=DECRYPTER)
+        context = ContextRecord(letters=LETTERS, ngrams=NGRAMS, dictionary=DICTIONARY, cipher=CIPHER, decrypter=DECRYPTER, start=START)
 
         # start process
         running_process = multiprocessing.Process(target=processed_make_tries, args=(ATTACKER, context, num, result_queue))
@@ -879,7 +891,7 @@ def main() -> None:
             best_quality_reached = quality_reached
 
         # copy all globals in context and pass them over (for windows)
-        context = ContextRecord(letters=LETTERS, ngrams=NGRAMS, dictionary=DICTIONARY, cipher=CIPHER, decrypter=DECRYPTER)
+        context = ContextRecord(letters=LETTERS, ngrams=NGRAMS, dictionary=DICTIONARY, cipher=CIPHER, decrypter=DECRYPTER, start=START)
 
         # pass changed bucket to process
         running_process = multiprocessing.Process(target=processed_make_tries, args=(ATTACKER, context, num_process, result_queue))
