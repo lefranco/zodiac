@@ -41,10 +41,8 @@ ALPHABET = [chr(i) for i in range(ord('a'), ord('z') + 1)]  # plain always lower
 EPSILON_NO_OCCURENCES = 1e-99  # zero has - infinite as log, must be << 1
 EPSILON_DELTA_FLOAT = 0.000001  # to compare floats (for debug check)
 
-MAX_SUBSTITUTION_STUFFING = 10
-MAX_BUCKET_SIZE = 99   # keep it to two digit
-
-MAX_ATTACKER_CLIMBS = 3
+# May be suppressed later on
+MAX_ATTACKER_CLIMBS = 1
 
 K_TEMPERATURE_ZERO = 1000.   # by convention keep it that way
 K_TEMPERATURE_REDUCTION = 0.05   # tuned ! - less : too slow - more : not efficient
@@ -405,27 +403,18 @@ class Decrypter:
 DECRYPTER: typing.Optional[Decrypter] = None
 
 
-class Allocator:
-    """ Allocator : Makes initial allocation """
+def make_random_key() -> typing.Dict[str, str]:
+    """ Makes a random key to start with """
 
-    def __init__(self, substitution_mode: bool) -> None:
-        self._substitution_mode = substitution_mode
+    assert CIPHER is not None
 
-    def make_random_key(self) -> typing.Dict[str, str]:
-        """ Makes a random key to start with """
+    allocation: typing.Dict[str, str] = dict()
 
-        assert CIPHER is not None
+    for cipher in CIPHER.cipher_codes:
+        letter_selected = secrets.choice(ALPHABET)
+        allocation[cipher] = letter_selected
 
-        allocation: typing.Dict[str, str] = dict()
-
-        for cipher in CIPHER.cipher_codes:
-            letter_selected = secrets.choice(ALPHABET)
-            allocation[cipher] = letter_selected
-
-        return allocation
-
-
-ALLOCATOR: typing.Optional[Allocator] = None
+    return allocation
 
 
 class Evaluation:
@@ -506,9 +495,6 @@ class Attacker:
         self._overall_n_grams_frequency_quality = 0.
 
         CIPHER.print_difficulty()
-
-        self._number_climbs = MAX_ATTACKER_CLIMBS
-        print(f"INFORMATION: Inner hill climb will limit number of climbs to {self._number_climbs}")
 
         # to measure speed
         self._n_operations = 0
@@ -701,7 +687,6 @@ class Attacker:
     def make_tries(self, num: int) -> typing.Tuple[Evaluation, typing.Dict[str, str], float, int]:
         """ make tries : this includes  random generator and inner hill climb """
 
-        assert ALLOCATOR is not None
         assert DECRYPTER is not None
         assert DICTIONARY is not None
         assert CIPHER is not None
@@ -715,14 +700,12 @@ class Attacker:
         best_quality_reached: typing.Optional[Evaluation] = None
 
         # limit the number of climbs
-        number_climbs_left = self._number_climbs
+        number_climbs_left = MAX_ATTACKER_CLIMBS
 
         while True:
 
             # pure random allocation
-            print(f"Process {self._num} uses a random key for climbs left={number_climbs_left}")
-            initial_key = ALLOCATOR.make_random_key()
-
+            initial_key = make_random_key()
             DECRYPTER.instantiate(initial_key)
 
             # reset frequency tables from new allocation
@@ -744,7 +727,7 @@ class Attacker:
                 best_key_reached = key_reached
 
                 # restart a complete climb from here (removed)
-                number_climbs_left = self._number_climbs
+                number_climbs_left = MAX_ATTACKER_CLIMBS
 
                 if IMPATIENT:
                     print(f"Process {self._num}: Putative solution below: ")
@@ -776,7 +759,6 @@ class ContextRecord(typing.NamedTuple):
     dictionary: Dictionary
     cipher: Cipher
     decrypter: Decrypter
-    allocator: Allocator
 
 
 def processed_make_tries(attacker: Attacker, context: ContextRecord, num: int, queue: typing.Any) -> None:  # do not type the queue it crashes the program
@@ -793,8 +775,6 @@ def processed_make_tries(attacker: Attacker, context: ContextRecord, num: int, q
         CIPHER = context.cipher
         global DECRYPTER
         DECRYPTER = context.decrypter
-        global ALLOCATOR
-        ALLOCATOR = context.allocator
         result = attacker.make_tries(num)
         queue.put(result)
         print(f"Process {num} finished.")
@@ -849,10 +829,6 @@ def main() -> None:
     global DECRYPTER
     DECRYPTER = Decrypter()
 
-    global ALLOCATOR
-    ALLOCATOR = Allocator(substitution_mode)
-    #  print(f"Allocator='{ALLOCATOR}'")
-
     global ATTACKER
     ATTACKER = Attacker()
 
@@ -864,7 +840,7 @@ def main() -> None:
     for num in range(n_processes):
 
         # copy all globals in context and pass them over (for windows)
-        context = ContextRecord(letters=LETTERS, ngrams=NGRAMS, dictionary=DICTIONARY, cipher=CIPHER, decrypter=DECRYPTER, allocator=ALLOCATOR)
+        context = ContextRecord(letters=LETTERS, ngrams=NGRAMS, dictionary=DICTIONARY, cipher=CIPHER, decrypter=DECRYPTER)
 
         # start process
         running_process = multiprocessing.Process(target=processed_make_tries, args=(ATTACKER, context, num, result_queue))
@@ -892,7 +868,7 @@ def main() -> None:
             best_quality_reached = quality_reached
 
         # copy all globals in context and pass them over (for windows)
-        context = ContextRecord(letters=LETTERS, ngrams=NGRAMS, dictionary=DICTIONARY, cipher=CIPHER, decrypter=DECRYPTER, allocator=ALLOCATOR)
+        context = ContextRecord(letters=LETTERS, ngrams=NGRAMS, dictionary=DICTIONARY, cipher=CIPHER, decrypter=DECRYPTER)
 
         # pass changed bucket to process
         running_process = multiprocessing.Process(target=processed_make_tries, args=(ATTACKER, context, num_process, result_queue))
