@@ -29,8 +29,8 @@ import cProfile
 import pstats
 
 PROFILE = False
-DEBUG = False
-IMPATIENT = False
+DEBUG = True
+IMPATIENT = True
 VERBOSE = False
 
 
@@ -271,9 +271,6 @@ class Cipher:
         # set of all n_grams in cipher
         self._n_grams_set = set(cipher_n_grams)
 
-        # a table where how many times code appear in cipher
-        self._codes_number_occurence_table = collections.Counter(self._cipher_str)
-
         # a table where how many times n_grams appear in cipher
         self._n_grams_number_occurence_table = collections.Counter(cipher_n_grams)
 
@@ -282,6 +279,9 @@ class Cipher:
         for n_gram in self._n_grams_set:
             for code in n_gram:
                 self._n_grams_localization_table[code].append(n_gram)
+
+        # a table where how many times code appear in cipher
+        self._codes_number_occurence_table = collections.Counter(self._content)
 
     def print_difficulty(self) -> None:
         """ climb_difficulty """
@@ -306,6 +306,11 @@ class Cipher:
     def n_grams_number_occurence_table(self) -> typing.Counter[str]:
         """ property """
         return self._n_grams_number_occurence_table
+
+    @property
+    def codes_number_occurence_table(self) -> typing.Counter[str]:
+        """ property """
+        return self._codes_number_occurence_table
 
     @property
     def n_grams_localization_table(self) -> typing.Dict[str, typing.List[str]]:
@@ -421,24 +426,35 @@ def make_random_key() -> typing.Dict[str, str]:
 class Evaluation:
     """ Evaluation """
 
-    def __init__(self, n_grams_frequency_quality: float) -> None:
+    def __init__(self, n_grams_frequency_quality: float, entropy_quality: float) -> None:
         self._n_grams_frequency_quality = n_grams_frequency_quality
+        self._entropy_quality = entropy_quality
+
+        # TODO : ADAPT (for the moment we ignore entropy)
+        self._quality = self._n_grams_frequency_quality
+
+    def delta(self, other: 'Evaluation') -> float:
+        """ delta """
+        return (self._quality - other.quality) / other.quality
 
     @property
-    def n_grams_frequency_quality(self) -> float:
+    def quality(self) -> float:
         """ property """
-        return self._n_grams_frequency_quality
+        return self._quality
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Evaluation):
             return NotImplemented
-        return abs(self._n_grams_frequency_quality - other.n_grams_frequency_quality) < EPSILON_DELTA_FLOAT
+        return abs(self._quality - other.quality) < EPSILON_DELTA_FLOAT
 
     def __gt__(self, other: 'Evaluation') -> bool:
-        return self._n_grams_frequency_quality > other.n_grams_frequency_quality + EPSILON_DELTA_FLOAT
+        return self._quality > other.quality + EPSILON_DELTA_FLOAT
+
+    def __ge__(self, other: 'Evaluation') -> bool:
+        return self._quality > other.quality or self._quality == other.quality
 
     def __str__(self) -> str:
-        return f"ngram qual={self._n_grams_frequency_quality}"
+        return f"ngram qual={self._n_grams_frequency_quality} entropy qual={self._entropy_quality} quality={self._quality}"
 
 
 class Solution:
@@ -490,10 +506,12 @@ class Attacker:
 
         self._num: typing.Optional[int] = None
 
-        # a table for remembering frequencies
+        # a table for remembering quality elements
         self._n_grams_frequency_quality_table: typing.Dict[str, float] = dict()
+        self._plain_repartition_table: typing.Dict[str, int] = collections.defaultdict(int)
 
         self._overall_n_grams_frequency_quality = 0.
+        self._overall_entropy_quality = 0.
 
         CIPHER.print_difficulty()
 
@@ -521,6 +539,22 @@ class Attacker:
 
         assert abs(qcheck - self._overall_n_grams_frequency_quality) < EPSILON_DELTA_FLOAT, "Debug mode detected an error for N-Gram freq"
 
+    def _check_entropy_quality(self) -> None:
+        """ Evaluates quality entropy DEBUG """
+
+        assert DEBUG
+
+        assert DECRYPTER is not None
+
+        # debug check
+        qcheck = 0.
+        plain = DECRYPTER.apply()
+        repartition = collections.Counter(plain)
+        assert(repartition == self._plain_repartition_table), "Debug mode detected repartition is different"
+        qcheck = sum([n * math.log2(n) for n in repartition.values()])
+
+        assert abs(qcheck - self._overall_entropy_quality) < EPSILON_DELTA_FLOAT, "Debug mode detected an error for entropy"
+
     def _move(self, cipher: str, plain_dest: str) -> None:
         """ move: this is where most CPU time is spent in the program """
 
@@ -528,10 +562,14 @@ class Attacker:
         assert CIPHER is not None
         assert DECRYPTER is not None
 
+        # where was the cipher before ?
+        plain_orig = DECRYPTER.decode_some(cipher)
+
         # actual move
         DECRYPTER.move(cipher, plain_dest)
 
-        # effect
+        # effect on ngram frequency ==
+
         for n_gram in CIPHER.n_grams_localization_table[cipher]:
 
             # old value
@@ -551,6 +589,31 @@ class Attacker:
 
             # summed
             self._overall_n_grams_frequency_quality += new_value
+
+        # effect on entropy ==
+
+        # how many plains are moving ?
+        delta_number = CIPHER.codes_number_occurence_table[cipher]
+        assert delta_number != 0, "Internal error"
+
+        # from orig :  remove them
+        orig_before = self._plain_repartition_table[plain_orig]
+        assert orig_before != 0, "Internal error"
+        self._overall_entropy_quality -= orig_before * math.log2(orig_before)
+        orig_after = orig_before - delta_number
+        if orig_after == 0:
+            del self._plain_repartition_table[plain_orig]
+        else:
+            self._plain_repartition_table[plain_orig] = orig_after
+            self._overall_entropy_quality += orig_after * math.log2(orig_after)
+
+        # from dest :  add them
+        dest_before = self._plain_repartition_table[plain_dest]
+        if dest_before != 0:
+            self._overall_entropy_quality -= dest_before * math.log2(dest_before)
+        dest_after = dest_before + delta_number
+        self._plain_repartition_table[plain_dest] = dest_after
+        self._overall_entropy_quality += dest_after * math.log2(dest_after)
 
         # to measure speed
         self._n_operations += 1
@@ -578,15 +641,18 @@ class Attacker:
             neighbour = secrets.choice(list(neighbours))
             cipher_moved, plain_from, plain_dest = neighbour
 
-            # keep a note of quality before change
-            old_overall_n_grams_frequency_quality = self._overall_n_grams_frequency_quality
+            # keep a note of qualities before change
+            old_evaluation = Evaluation(self._overall_n_grams_frequency_quality, self._overall_entropy_quality)
 
             # apply change now
             self._move(cipher_moved, plain_dest)
 
+            new_evaluation = Evaluation(self._overall_n_grams_frequency_quality, self._overall_entropy_quality)
+
             # quality should lower in this context
-            assert self._overall_n_grams_frequency_quality <= old_overall_n_grams_frequency_quality
-            delta_quality_percent = abs((self._overall_n_grams_frequency_quality - old_overall_n_grams_frequency_quality) / old_overall_n_grams_frequency_quality)
+            assert new_evaluation <= old_evaluation
+
+            delta_quality_percent = abs(new_evaluation.delta(old_evaluation))
             proba_acceptance = math.exp(- delta_quality_percent / (K_TEMPERATURE_FACTOR * self._temperature))
 
             # apply acceptance probability function
@@ -621,16 +687,19 @@ class Attacker:
             # -----------------------
 
             # keep a note of quality before change
-            old_overall_n_grams_frequency_quality = self._overall_n_grams_frequency_quality
+            old_evaluation = Evaluation(self._overall_n_grams_frequency_quality, self._overall_entropy_quality)
 
             # apply change now
             self._move(cipher_moved, plain_dest)
 
             if DEBUG:
                 self._check_n_gram_frequency_quality()
+                self._check_entropy_quality()
+
+            new_evaluation = Evaluation(self._overall_n_grams_frequency_quality, self._overall_entropy_quality)
 
             # did the quality improve ?
-            if self._overall_n_grams_frequency_quality > old_overall_n_grams_frequency_quality:
+            if new_evaluation > old_evaluation:
                 # yes : stop looping : we have improved
                 return True
 
@@ -642,6 +711,7 @@ class Attacker:
 
             if DEBUG:
                 self._check_n_gram_frequency_quality()
+                self._check_entropy_quality()
 
     def _climb(self) -> None:
         """ climb : keeps going up until fails to do so """
@@ -675,22 +745,22 @@ class Attacker:
         assert DECRYPTER is not None
         assert NGRAMS is not None
 
+        # n grams ==
         self._n_grams_frequency_quality_table.clear()
-
         # n_gram frequency quality table
         for n_gram in CIPHER.n_grams_set:
-
             # plain
             plain = DECRYPTER.decode_some(n_gram)
-
             # remembered
             self._n_grams_frequency_quality_table[n_gram] = NGRAMS.log_freq_table.get(plain, NGRAMS.worst_frequency) * CIPHER.n_grams_number_occurence_table[n_gram]
-
-        # n_gram overall frequency quality of cipher
-        # summed
         self._overall_n_grams_frequency_quality = sum(self._n_grams_frequency_quality_table.values())
 
-        # simulated annealing
+        # entropy ==
+        plain = DECRYPTER.apply()
+        self._plain_repartition_table = collections.Counter(plain)
+        self._overall_entropy_quality = sum([n * math.log2(n) for n in self._plain_repartition_table.values()])
+
+        # simulated annealing ==
         self._temperature = K_TEMPERATURE_ZERO
 
     def make_tries(self, num: int) -> typing.Tuple[Evaluation, typing.Dict[str, str], float, int]:
@@ -725,8 +795,7 @@ class Attacker:
             # actual climb
             self._climb()
 
-            quality_ngrams_reached = self._overall_n_grams_frequency_quality
-            quality_reached = Evaluation(quality_ngrams_reached)
+            quality_reached = Evaluation(self._overall_n_grams_frequency_quality, self._overall_entropy_quality)
             key_reached = DECRYPTER.allocation()
 
             # handle local best quality
