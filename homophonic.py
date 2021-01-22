@@ -431,7 +431,7 @@ class Evaluation:
         self._entropy_quality = entropy_quality
 
         # TODO : ADAPT (for the moment we ignore entropy)
-        self._quality = self._n_grams_frequency_quality
+        self._quality = self._n_grams_frequency_quality + - self._entropy_quality
 
     def delta(self, other: 'Evaluation') -> float:
         """ delta """
