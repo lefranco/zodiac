@@ -735,7 +735,8 @@ class Attacker:
                     if VERBOSE:
                         print(f" {self._num}-", flush=True)
 
-                    print(f"Process {self._num} reached a peak at qual={self._overall_n_grams_frequency_quality}")
+                    quality = Evaluation(self._overall_n_grams_frequency_quality, self._overall_entropy_quality)
+                    print(f"Process {self._num} reached a peak at qual={quality}")
                     return
 
     def _reset_frequencies(self) -> None:
