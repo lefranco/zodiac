@@ -422,7 +422,7 @@ class Evaluation:
         self._anti_entropy_quality = anti_entropy_quality
 
         # TODO : adapt to jauge coefs
-        self._quality = self._n_grams_frequency_quality - self._anti_entropy_quality
+        self._quality = self._n_grams_frequency_quality * self._anti_entropy_quality
 
     def delta(self, other: 'Evaluation') -> float:
         """ delta """
