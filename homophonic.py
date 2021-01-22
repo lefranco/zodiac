@@ -29,8 +29,8 @@ import cProfile
 import pstats
 
 PROFILE = False
-DEBUG = True
-IMPATIENT = True
+DEBUG = False
+IMPATIENT = False
 VERBOSE = False
 
 
