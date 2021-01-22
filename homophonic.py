@@ -426,12 +426,12 @@ def make_random_key() -> typing.Dict[str, str]:
 class Evaluation:
     """ Evaluation """
 
-    def __init__(self, n_grams_frequency_quality: float, entropy_quality: float) -> None:
+    def __init__(self, n_grams_frequency_quality: float, anti_entropy_quality: float) -> None:
         self._n_grams_frequency_quality = n_grams_frequency_quality
-        self._entropy_quality = entropy_quality
+        self._anti_entropy_quality = anti_entropy_quality
 
-        # TODO : ADAPT (for the moment we ignore entropy)
-        self._quality = self._n_grams_frequency_quality + - self._entropy_quality
+        # TODO : adapt to jauge coefs
+        self._quality = self._n_grams_frequency_quality - self._anti_entropy_quality
 
     def delta(self, other: 'Evaluation') -> float:
         """ delta """
@@ -454,7 +454,7 @@ class Evaluation:
         return self._quality > other.quality or self._quality == other.quality
 
     def __str__(self) -> str:
-        return f"ngram qual={self._n_grams_frequency_quality} entropy qual={self._entropy_quality} quality={self._quality}"
+        return f"ngram qual={self._n_grams_frequency_quality} anti entropy qual={self._anti_entropy_quality} quality={self._quality}"
 
 
 class Solution:
@@ -511,7 +511,7 @@ class Attacker:
         self._plain_repartition_table: typing.Dict[str, int] = collections.defaultdict(int)
 
         self._overall_n_grams_frequency_quality = 0.
-        self._overall_entropy_quality = 0.
+        self._overall_anti_entropy_quality = 0.
 
         CIPHER.print_difficulty()
 
@@ -553,7 +553,7 @@ class Attacker:
         assert(repartition == self._plain_repartition_table), "Debug mode detected repartition is different"
         qcheck = sum([n * math.log2(n) for n in repartition.values()])
 
-        assert abs(qcheck - self._overall_entropy_quality) < EPSILON_DELTA_FLOAT, "Debug mode detected an error for entropy"
+        assert abs(qcheck - self._overall_anti_entropy_quality) < EPSILON_DELTA_FLOAT, "Debug mode detected an error for entropy"
 
     def _move(self, cipher: str, plain_dest: str) -> None:
         """ move: this is where most CPU time is spent in the program """
@@ -599,21 +599,21 @@ class Attacker:
         # from orig :  remove them
         orig_before = self._plain_repartition_table[plain_orig]
         assert orig_before != 0, "Internal error"
-        self._overall_entropy_quality -= orig_before * math.log2(orig_before)
+        self._overall_anti_entropy_quality -= orig_before * math.log2(orig_before)
         orig_after = orig_before - delta_number
         if orig_after == 0:
             del self._plain_repartition_table[plain_orig]
         else:
             self._plain_repartition_table[plain_orig] = orig_after
-            self._overall_entropy_quality += orig_after * math.log2(orig_after)
+            self._overall_anti_entropy_quality += orig_after * math.log2(orig_after)
 
         # from dest :  add them
         dest_before = self._plain_repartition_table[plain_dest]
         if dest_before != 0:
-            self._overall_entropy_quality -= dest_before * math.log2(dest_before)
+            self._overall_anti_entropy_quality -= dest_before * math.log2(dest_before)
         dest_after = dest_before + delta_number
         self._plain_repartition_table[plain_dest] = dest_after
-        self._overall_entropy_quality += dest_after * math.log2(dest_after)
+        self._overall_anti_entropy_quality += dest_after * math.log2(dest_after)
 
         # to measure speed
         self._n_operations += 1
@@ -642,12 +642,12 @@ class Attacker:
             cipher_moved, plain_from, plain_dest = neighbour
 
             # keep a note of qualities before change
-            old_evaluation = Evaluation(self._overall_n_grams_frequency_quality, self._overall_entropy_quality)
+            old_evaluation = Evaluation(self._overall_n_grams_frequency_quality, self._overall_anti_entropy_quality)
 
             # apply change now
             self._move(cipher_moved, plain_dest)
 
-            new_evaluation = Evaluation(self._overall_n_grams_frequency_quality, self._overall_entropy_quality)
+            new_evaluation = Evaluation(self._overall_n_grams_frequency_quality, self._overall_anti_entropy_quality)
 
             # quality should lower in this context
             assert new_evaluation <= old_evaluation
@@ -687,7 +687,7 @@ class Attacker:
             # -----------------------
 
             # keep a note of quality before change
-            old_evaluation = Evaluation(self._overall_n_grams_frequency_quality, self._overall_entropy_quality)
+            old_evaluation = Evaluation(self._overall_n_grams_frequency_quality, self._overall_anti_entropy_quality)
 
             # apply change now
             self._move(cipher_moved, plain_dest)
@@ -696,7 +696,7 @@ class Attacker:
                 self._check_n_gram_frequency_quality()
                 self._check_entropy_quality()
 
-            new_evaluation = Evaluation(self._overall_n_grams_frequency_quality, self._overall_entropy_quality)
+            new_evaluation = Evaluation(self._overall_n_grams_frequency_quality, self._overall_anti_entropy_quality)
 
             # did the quality improve ?
             if new_evaluation > old_evaluation:
@@ -735,7 +735,7 @@ class Attacker:
                     if VERBOSE:
                         print(f" {self._num}-", flush=True)
 
-                    quality = Evaluation(self._overall_n_grams_frequency_quality, self._overall_entropy_quality)
+                    quality = Evaluation(self._overall_n_grams_frequency_quality, self._overall_anti_entropy_quality)
                     print(f"Process {self._num} reached a peak at qual={quality}")
                     return
 
@@ -759,7 +759,7 @@ class Attacker:
         # entropy ==
         plain = DECRYPTER.apply()
         self._plain_repartition_table = collections.Counter(plain)
-        self._overall_entropy_quality = sum([n * math.log2(n) for n in self._plain_repartition_table.values()])
+        self._overall_anti_entropy_quality = sum([n * math.log2(n) for n in self._plain_repartition_table.values()])
 
         # simulated annealing ==
         self._temperature = K_TEMPERATURE_ZERO
@@ -796,7 +796,7 @@ class Attacker:
             # actual climb
             self._climb()
 
-            quality_reached = Evaluation(self._overall_n_grams_frequency_quality, self._overall_entropy_quality)
+            quality_reached = Evaluation(self._overall_n_grams_frequency_quality, self._overall_anti_entropy_quality)
             key_reached = DECRYPTER.allocation()
 
             # handle local best quality
