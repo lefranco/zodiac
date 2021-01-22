@@ -493,7 +493,7 @@ class Solution:
         print(f"index_of_coincidence={index_of_coincidence} (reference={REF_IOC})", file=file_handle)
         print(f"dictionary_quality={dictionary_quality}", file=file_handle)
         print(f"quality={self._quality}", file=file_handle)
-        print(f"time taken={self._time_taken}", file=file_handle)
+        print(f"time taken={self._time_taken} sec.", file=file_handle)
         my_decrypter.print_key(file_handle)
 
 
