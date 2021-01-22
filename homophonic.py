@@ -237,12 +237,9 @@ DICTIONARY: typing.Optional[Dictionary] = None
 class Cipher:
     """ A cipher : basically a string """
 
-    def __init__(self, filename: str, substitution_mode: bool) -> None:
+    def __init__(self, filename: str) -> None:
 
         assert NGRAMS is not None
-
-        if substitution_mode:
-            print("INFORMATION: Substitution mode")
 
         # the string (as a list) read from cipher file
         self._content: typing.List[str] = list()
@@ -251,12 +248,6 @@ class Cipher:
                 line = line.rstrip('\n')
                 for word in line.split():
                     for code in word:
-
-                        # substituion mode : check in alphabet, store as upper case
-                        if substitution_mode:
-                            assert code.lower() in ALPHABET, f"Problem in substituion cipher with code {code}"
-                            code = code.upper()
-
                         self._content.append(code)
 
         # the cipher as it appears
@@ -873,6 +864,8 @@ def processed_make_tries(attacker: Attacker, context: ContextRecord, num: int, q
 
     except KeyboardInterrupt:
         print("Ctrl+C detected (in sub process)!")
+        if PROFILE:
+            raise
 
 
 def main() -> None:
@@ -887,11 +880,12 @@ def main() -> None:
     parser.add_argument('-l', '--letters', required=True, help='input a file with frequency table for letters')
     parser.add_argument('-c', '--cipher', required=True, help='cipher to attack')
     parser.add_argument('-o', '--output_solutions', required=False, help='file where to output successive solutions')
-    parser.add_argument('-s', '--substitution_mode', required=False, help='cipher is simple substitution (not homophonic)', action='store_true')
     args = parser.parse_args()
 
     n_processes = int(args.processes)
     print(f"INFORMATION: Using {n_processes} processes")
+    if PROFILE:
+        assert n_processes == 1, "One processs when profiling"
 
     ref_ioc_file = args.ioc
     if ref_ioc_file is not None:
@@ -913,10 +907,9 @@ def main() -> None:
     DICTIONARY = Dictionary(dictionary_file, limit)
     #  print(DICTIONARY)
 
-    substitution_mode = args.substitution_mode
     cipher_file = args.cipher
     global CIPHER
-    CIPHER = Cipher(cipher_file, substitution_mode)
+    CIPHER = Cipher(cipher_file)
     #  print(f"Cipher='{CIPHER}'")
 
     global DECRYPTER
@@ -935,9 +928,12 @@ def main() -> None:
         # copy all globals in context and pass them over (for windows)
         context = ContextRecord(letters=LETTERS, ngrams=NGRAMS, dictionary=DICTIONARY, cipher=CIPHER, decrypter=DECRYPTER, start=START)
 
-        # start process
-        running_process = multiprocessing.Process(target=processed_make_tries, args=(ATTACKER, context, num, result_queue))
-        running_process.start()
+        if not PROFILE:
+            # start process
+            running_process = multiprocessing.Process(target=processed_make_tries, args=(ATTACKER, context, num, result_queue))
+            running_process.start()
+        else:
+            processed_make_tries(ATTACKER, context, num, result_queue)
 
     best_quality_reached: typing.Optional[Evaluation] = None
 
@@ -963,10 +959,12 @@ def main() -> None:
         # copy all globals in context and pass them over (for windows)
         context = ContextRecord(letters=LETTERS, ngrams=NGRAMS, dictionary=DICTIONARY, cipher=CIPHER, decrypter=DECRYPTER, start=START)
 
-        # pass changed bucket to process
-        running_process = multiprocessing.Process(target=processed_make_tries, args=(ATTACKER, context, num_process, result_queue))
-        running_process.start()
-
+        if not PROFILE:
+            # pass changed bucket to process
+            running_process = multiprocessing.Process(target=processed_make_tries, args=(ATTACKER, context, num_process, result_queue))
+            running_process.start()
+        else:
+            processed_make_tries(ATTACKER, context, num, result_queue)
 
 if __name__ == '__main__':
 
