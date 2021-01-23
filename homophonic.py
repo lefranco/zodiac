@@ -22,7 +22,7 @@ import functools
 import copy
 import contextlib
 import pprint
-import secrets  # instead of random
+import random
 import multiprocessing
 
 import cProfile
@@ -47,8 +47,6 @@ MAX_ATTACKER_CLIMBS = 1
 K_TEMPERATURE_ZERO = 1000.   # by convention keep it that way
 K_TEMPERATURE_REDUCTION = 0.05   # tuned ! - less : too slow - more : not efficient
 K_TEMPERATURE_FACTOR = 0.5   # tuned ! - more : more tolerant when going down
-
-NUMBER_BITS_RANDOM = 16
 
 REF_IOC = 0.
 
@@ -408,7 +406,7 @@ def make_random_key() -> typing.Dict[str, str]:
     allocation: typing.Dict[str, str] = dict()
 
     for cipher in CIPHER.cipher_codes:
-        letter_selected = secrets.choice(ALPHABET)
+        letter_selected = random.choice(ALPHABET)
         allocation[cipher] = letter_selected
 
     return allocation
@@ -615,9 +613,7 @@ class Attacker:
         def decide_accept(proba_acceptance: float) -> bool:
             """ decide_accept """
             assert 0. <= proba_acceptance <= 1.
-            alea = float(secrets.randbits(NUMBER_BITS_RANDOM) / 2 ** NUMBER_BITS_RANDOM)
-            assert 0. <= alea <= 1.
-            return alea <= proba_acceptance
+            return random.random() <= proba_acceptance
 
         assert DECRYPTER is not None
 
@@ -629,7 +625,7 @@ class Attacker:
         while True:
 
             # take a random neighbour
-            neighbour = secrets.choice(list(neighbours))
+            neighbour = random.choice(list(neighbours))
             cipher_moved, plain_from, plain_dest = neighbour
 
             # keep a note of qualities before change
@@ -669,7 +665,7 @@ class Attacker:
         while True:
 
             # take a random neighbour
-            neighbour = secrets.choice(list(neighbours))
+            neighbour = random.choice(list(neighbours))
             neighbours.remove(neighbour)
             cipher_moved, plain_from, plain_dest = neighbour
 
