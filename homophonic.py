@@ -923,6 +923,9 @@ def main() -> None:
 
     result_queue: multiprocessing.Queue[typing.Tuple[Evaluation, typing.Dict[str, str], float, int]] = multiprocessing.Queue()  # pylint: disable=unsubscriptable-object
 
+    # remember processes to join them
+    process_table: typing.Dict[int, multiprocessing.Process] = dict()
+
     for num in range(n_processes):
 
         # copy all globals in context and pass them over (for windows)
@@ -932,6 +935,7 @@ def main() -> None:
             # start process
             running_process = multiprocessing.Process(target=processed_make_tries, args=(ATTACKER, context, num, result_queue))
             running_process.start()
+            process_table[num] = running_process
         else:
             processed_make_tries(ATTACKER, context, num, result_queue)
 
@@ -942,6 +946,9 @@ def main() -> None:
 
         # inner hill climb (includes random start key generator)
         quality_reached, key_reached, speed, num_process = result_queue.get()
+        if not PROFILE:
+            finished_process = process_table[num_process]
+            finished_process.join()
 
         # show new bucket
         print("=============================================")
@@ -963,8 +970,10 @@ def main() -> None:
             # pass changed bucket to process
             running_process = multiprocessing.Process(target=processed_make_tries, args=(ATTACKER, context, num_process, result_queue))
             running_process.start()
+            process_table[num_process] = running_process
         else:
             processed_make_tries(ATTACKER, context, num, result_queue)
+
 
 if __name__ == '__main__':
 
