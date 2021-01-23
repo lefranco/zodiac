@@ -583,11 +583,9 @@ class Attacker:
 
         # how many plains are moving ?
         delta_number = CIPHER.codes_number_occurence_table[cipher]
-        assert delta_number != 0, "Internal error"
 
         # from orig :  remove them
         orig_before = self._plain_repartition_table[plain_orig]
-        assert orig_before != 0, "Internal error"
         self._overall_anti_entropy_quality -= orig_before * math.log2(orig_before)
         orig_after = orig_before - delta_number
         if orig_after == 0:
