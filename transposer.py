@@ -16,176 +16,91 @@ import secrets  # instead of random
 
 CRYPT_CHARACTERS = [chr(i) for i in range(ord('!'), ord('~') + 1)]
 
-
-class Letters:
-    """ Ngrams : says the frequency of letters """
-
-    def __init__(self, filename: str):
-
-        raw_frequency_table: typing.Dict[str, int] = dict()
-        with open(filename) as filepointer:
-            for line in filepointer:
-                line = line.rstrip('\n')
-                letter_read, letter_str = line.split()
-                letter = letter_read.lower()
-                frequency = int(letter_str)
-                raw_frequency_table[letter] = frequency
-
-        assert len(raw_frequency_table) == len(ALPHABET)
-
-        sum_occurences = sum(raw_frequency_table.values())
-
-        # for normal values
-        self._freq_table = {q: raw_frequency_table[q] / sum_occurences for q in raw_frequency_table}
-
-    @property
-    def freq_table(self) -> typing.Dict[str, float]:
-        """ property """
-        return self._freq_table
-
-    def __str__(self) -> str:
-        """ for debug """
-        return pprint.pformat(self._freq_table)
-
-
-LETTERS: typing.Optional[Letters] = None
-
-
-class Crypter:
-    """ A crypter : basically a dictionnary """
-
-    def __init__(self, substitution_mode: bool, number: typing.Optional[int]):
-
-        assert LETTERS is not None
-
-        # how many cipher for a plain
-        if substitution_mode:
-            numbers = {ll: 1 for ll in ALPHABET}
-            pool = set(map(lambda c: c.upper(), ALPHABET))
-        else:
-            assert number is not None
-            numbers = {ll: max(1, round(LETTERS.freq_table[ll] * number) - 1 + secrets.choice(range(-1, 2))) for ll in ALPHABET}
-            pool = set(CRYPT_CHARACTERS)
-            assert len(pool) >= sum(numbers.values()), "Too many ciphers to create"
-
-        # encrypting table
-        self._table: typing.Dict[str, typing.List[str]] = collections.defaultdict(list)
-        for letter in ALPHABET:
-            for _ in range(numbers[letter]):
-                code = secrets.choice(list(pool))
-                pool.remove(code)
-                self._table[letter].append(code)
-
-    def encrypt(self, char: str) -> str:
-        """ encode """
-        return secrets.choice(self._table[char])
-
-    def print_key(self, file_handle: typing.TextIO) -> None:
-        """ print_key """
-
-        assert CIPHER is not None
-
-        with contextlib.redirect_stdout(file_handle):
-
-            print("-" * len(ALPHABET))
-            print(''.join(ALPHABET))
-            most_affected = max([len(s) for s in self._table.values()])
-            for rank in range(most_affected):
-                for letter in ALPHABET:
-                    if letter in CIPHER.clear_content:
-                        ciphers = sorted(self._table[letter])
-                        if rank < len(ciphers):
-                            cipher = ciphers[rank]
-                            print(cipher, end='')
-                        else:
-                            print(' ', end='')
-                    else:
-                        print(' ', end='')
-                print()
-            print("-" * len(ALPHABET))
-
-
-CRYPTER: typing.Optional[Crypter]
-
+WIDTH_CIPHER = 17
+HEIGHT_BLOCK = 9
+SHIFT = 2
 
 class Cipher:
     """ A cipher : basically a string """
 
     def __init__(self, filename: str) -> None:
 
-        assert CRYPTER is not None
+        # the string (as a list) read from cipher file
         self._content: typing.List[str] = list()
-        self._clear_content: typing.List[str] = list()
-
         with open(filename) as filepointer:
             for line in filepointer:
                 line = line.rstrip('\n')
-                if line:
-                    nfkd_form = unicodedata.normalize('NFKD', line)
-                    only_ascii = nfkd_form.encode('ASCII', 'ignore')
-                    only_ascii_str = only_ascii.decode()
-                    for word in only_ascii_str.split():
-                        word = word.lower()
-                        for letter in word:
-                            if letter not in ALPHABET:
-                                continue
-                            self._clear_content.append(letter)
-                            code = CRYPTER.encrypt(letter)
-                            self._content.append(code)
+                for word in line.split():
+                    for code in word:
+                        self._content.append(code)
 
-        self._cipher_str = ''.join(self._content)
+        # the different codes in cipher
+        self._cipher_codes = ''.join(sorted(set(self._content)))
+
+        self._blocks = collections.defaultdict(dict)
+        self._transposed = list()
+
+    def print_difficulty(self) -> None:
+        """ climb_difficulty """
+        print(f"INFORMATION: We have a cipher with {len(self._cipher_codes)} different codes and a length of {len(self._content)}")
+
+    def transpose(self) -> None:
+
+        # put in blocks
+        for num, cipher in enumerate(self._content):
+            column = num % WIDTH_CIPHER
+            line = num // WIDTH_CIPHER
+            line_in_block = line % HEIGHT_BLOCK
+            num_block = line // HEIGHT_BLOCK
+            self._blocks[num_block][(line_in_block, column)] = cipher
+
+        # extract from blocks
+        transposed = list()
+        for num_block, content_block in self._blocks.items():
+
+            for pos_start in range(WIDTH_CIPHER):
+                position = pos_start
+
+                for cur_line in range(HEIGHT_BLOCK):
+                    cur_col =  (pos_start + (SHIFT *  cur_line)) % WIDTH_CIPHER
+                    if (cur_line, cur_col) in self._blocks[num_block]:
+                        cipher = self._blocks[num_block][(cur_line, cur_col)]
+                        self._transposed.append(cipher)
 
     @property
-    def clear_content(self) -> typing.List[str]:
+    def cipher_codes(self) -> str:
         """ property """
-        return self._clear_content
+        return self._cipher_codes
+
 
     def __str__(self) -> str:
-        return self._cipher_str
+        return ''.join(self._transposed)
+        #return pprint.pformat(self._blocks)
+        #return ''.join(self._content)
 
 
-CIPHER: typing.Optional[Cipher]
+CIPHER: typing.Optional[Cipher] = None
 
 
 def main() -> None:
     """ main """
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('-l', '--letters', required=True, help='input a file with frequency table for letters')
-    parser.add_argument('-i', '--input', required=True, help='input file with plain (can have spaces within - will be removed - can have accents - will be corrected)')
-    parser.add_argument('-s', '--substitution_mode', required=False, help='cipher is simple substitution (not homophonic)', action='store_true')
-    parser.add_argument('-n', '--number', required=True, help='number of distinct characters to put in cipher if homophonic')
-    parser.add_argument('-o', '--output', required=True, help='output a file with ciphers')
-    parser.add_argument('-K', '--key_dump', required=False, help='dump crypter key to file')
+    parser.add_argument('-i', '--input', required=True, help='input file with cipher')
+    parser.add_argument('-o', '--output', required=True, help='output a file with cipher transposed')
     args = parser.parse_args()
-
-    letters_file = args.letters
-    global LETTERS
-    LETTERS = Letters(letters_file)
-    #  print(LETTERS)
-
-    substitution_mode = args.substitution_mode
-    number = int(args.number)
-
-    if substitution_mode:
-        assert number == len(ALPHABET), f"Number must be {len(ALPHABET)} for substitution_mode cipher"
-
-    global CRYPTER
-    CRYPTER = Crypter(substitution_mode, number)
 
     cipher_input_file = args.input
     cipher_output_file = args.output
-    substitution_mode = args.substitution_mode
+
     global CIPHER
     CIPHER = Cipher(cipher_input_file)
+
+    CIPHER.print_difficulty()
+    CIPHER.transpose()
+
     with open(cipher_output_file, 'w') as file_handle:
         print(CIPHER, file=file_handle)
-
-    if args.key_dump:
-        crypter_output_file = args.key_dump
-        # will not print characters absent from cipher
-        with open(crypter_output_file, 'w') as file_handle:
-            CRYPTER.print_key(file_handle)
 
 
 if __name__ == '__main__':
