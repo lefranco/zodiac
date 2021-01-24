@@ -2,8 +2,8 @@
 
 
 """
-Input : text (file with words)
-Output : code (file with characters)
+Input : big text
+Output : quads frequencies
 """
 
 import typing
@@ -45,7 +45,10 @@ class Plain:
     def stats(self, file_handle: typing.TextIO) -> None:
         """ stats """
 
+        # counting letters
         quads_count = collections.Counter(self._words)
+
+        # counting  quadgrams
 #        quads_count = collections.Counter([self._plain_str[p: p+4] for p in range(len(self._plain_str)-4)])
 
         with contextlib.redirect_stdout(file_handle):
