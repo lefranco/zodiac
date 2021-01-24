@@ -24,6 +24,7 @@ import contextlib
 import pprint
 import random
 import multiprocessing
+import gc
 
 import cProfile
 import pstats
@@ -943,6 +944,7 @@ def main() -> None:
         if not PROFILE:
             finished_process = process_table[num_process]
             finished_process.join()
+            gc.collect() # reclaims ressources from finished process
 
         # show new bucket
         print("=============================================")
