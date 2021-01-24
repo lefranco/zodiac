@@ -23,7 +23,7 @@ import itertools
 import copy
 import contextlib
 import pprint
-import secrets  # instead of random
+import random
 
 import cProfile
 import pstats
@@ -35,6 +35,7 @@ VERBOSE = False
 
 
 RECURSION_LIMIT = 5000  # default is 1000 - this is only for when putting spaces when displaying plain text
+VERY_BAD_DICTIONNARY = - 1e99
 
 ALPHABET = [chr(i) for i in range(ord('a'), ord('z') + 1)]  # plain always lower case
 EPSILON_NO_OCCURENCES = 1e-99  # zero has - infinite as log, must be << 1
@@ -44,13 +45,10 @@ EPSILON_DELTA_FLOAT = 0.000001  # to compare floats (for debug check)
 MAX_ATTACKER_CLIMBS = 1
 
 MAX_SUBSTITUTION_STUFFING = 10
-MAX_BUCKET_SIZE = 99   # keep it to two digit
 
 K_TEMPERATURE_ZERO = 1000.   # by convention keep it that way
 K_TEMPERATURE_REDUCTION = 0.05   # tuned ! - less : too slow - more : not efficient
-K_TEMPERATURE_FACTOR = 0.5   # tuned !
-
-NUMBER_BITS_RANDOM = 16
+K_TEMPERATURE_FACTOR = 0.5   # tuned ! - more : more tolerant when going down
 
 REF_IOC = 0.
 
@@ -222,7 +220,10 @@ class Dictionary:
             candidates = [[first] + segment_rec(rest) for first, rest in splits(text)]
             return max(candidates, key=words_probability)
 
-        best_words = segment_rec(plain)
+        try:
+            best_words = segment_rec(plain)
+        except RecursionError:
+            return VERY_BAD_DICTIONNARY, ["(garbage presumed)"]
         return words_probability(best_words), best_words
 
     def __str__(self) -> str:
@@ -264,9 +265,6 @@ class Cipher:
         # set of all n_grams in cipher
         self._n_grams_set = set(cipher_n_grams)
 
-        # a table where how many times code appear in cipher
-        self._codes_number_occurence_table = collections.Counter(self._cipher_str)
-
         # a table where how many times n_grams appear in cipher
         self._n_grams_number_occurence_table = collections.Counter(cipher_n_grams)
 
@@ -275,6 +273,9 @@ class Cipher:
         for n_gram in self._n_grams_set:
             for code in n_gram:
                 self._n_grams_localization_table[code].append(n_gram)
+
+        # a table where how many times code appear in cipher
+        self._codes_number_occurence_table = collections.Counter(self._content)
 
     def print_difficulty(self) -> None:
         """ climb_difficulty """
@@ -408,7 +409,7 @@ def make_random_key() -> typing.Dict[str, str]:
     pot = copy.copy(ALPHABET)
 
     for cipher in CIPHER.cipher_codes:
-        letter_selected = secrets.choice(pot)
+        letter_selected = random.choice(pot)
         pot.remove(letter_selected)
         allocation[cipher] = letter_selected
 
@@ -417,7 +418,7 @@ def make_random_key() -> typing.Dict[str, str]:
         assert len(stuffing) <= MAX_SUBSTITUTION_STUFFING, "Too few different characters in substitution cipher"
         num = 0
         while True:
-            letter_selected = secrets.choice(stuffing)
+            letter_selected = random.choice(stuffing)
             stuffing.remove(letter_selected)
             allocation[f'{num}'] = letter_selected
             num += 1
@@ -486,7 +487,7 @@ class Solution:
         print(f"index_of_coincidence={index_of_coincidence} (reference={REF_IOC})", file=file_handle)
         print(f"dictionary_quality={dictionary_quality}", file=file_handle)
         print(f"quality={self._quality}", file=file_handle)
-        print(f"time taken={self._time_taken}", file=file_handle)
+        print(f"time taken={self._time_taken} sec.", file=file_handle)
         my_decrypter.print_key(file_handle)
 
 
@@ -566,9 +567,7 @@ class Attacker:
         def decide_accept(proba_acceptance: float) -> bool:
             """ decide_accept """
             assert 0. <= proba_acceptance <= 1.
-            alea = float(secrets.randbits(NUMBER_BITS_RANDOM) / 2 ** NUMBER_BITS_RANDOM)
-            assert 0. <= alea <= 1.
-            return alea <= proba_acceptance
+            return random.random() <= proba_acceptance
 
         assert DECRYPTER is not None
 
@@ -577,7 +576,7 @@ class Attacker:
         while True:
 
             # take a random neighbour
-            neighbour = secrets.choice(list(neighbours))
+            neighbour = random.choice(list(neighbours))
             cipher1, cipher2 = neighbour
 
             # keep a note of quality before change
@@ -611,7 +610,7 @@ class Attacker:
         while True:
 
             # take a random neighbour
-            neighbour = secrets.choice(list(neighbours))
+            neighbour = random.choice(list(neighbours))
             neighbours.remove(neighbour)
             cipher1, cipher2 = neighbour
 
@@ -674,14 +673,12 @@ class Attacker:
         assert DECRYPTER is not None
         assert NGRAMS is not None
 
+        # n grams ==
         self._n_grams_frequency_quality_table.clear()
-
         # n_gram frequency quality table
         for n_gram in CIPHER.n_grams_set:
-
             # plain
             plain = DECRYPTER.decode_some(n_gram)
-
             # remembered
             self._n_grams_frequency_quality_table[n_gram] = NGRAMS.log_freq_table.get(plain, NGRAMS.worst_frequency) * CIPHER.n_grams_number_occurence_table[n_gram]
 
@@ -710,6 +707,7 @@ class Attacker:
 
         while True:
 
+            # pure random allocation
             initial_key = make_random_key()
             DECRYPTER.instantiate(initial_key)
 
@@ -730,6 +728,9 @@ class Attacker:
 
                 best_quality_reached = quality_reached
                 best_key_reached = key_reached
+
+                # restart a complete climb from here (removed)
+                number_climbs_left = MAX_ATTACKER_CLIMBS
 
                 if IMPATIENT:
                     print(f"Putative solution below: ")
@@ -805,7 +806,7 @@ def main() -> None:
     # file to best solution online
     output_solutions_file = args.output_solutions
 
-    best_quality_reached = None
+    best_quality_reached: typing.Optional[Evaluation] = None
 
     # outer hill climb
     while True:
