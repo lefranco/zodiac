@@ -420,7 +420,9 @@ class Evaluation:
         self._n_grams_frequency_quality = n_grams_frequency_quality
         self._anti_entropy_quality = anti_entropy_quality
 
-        # TODO : adapt to jauge coefs
+        # multiply seeems to work, other options seem to only get worse...
+        # 'self._n_grams_frequency_quality' is negative and must be as close as possible to zero (higher frequency)
+        # 'self._anti_entropy_quality' (opposite of entropy)  is positive and must be as close as possible to zero (higher entropy)
         self._quality = self._n_grams_frequency_quality * self._anti_entropy_quality
 
     def delta(self, other: 'Evaluation') -> float:
@@ -944,7 +946,7 @@ def main() -> None:
         if not PROFILE:
             finished_process = process_table[num_process]
             finished_process.join()
-            gc.collect() # reclaims ressources from finished process
+            gc.collect()  # reclaims ressources from finished process
 
         # show new bucket
         print("=============================================")
