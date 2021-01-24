@@ -9,16 +9,13 @@ Output : text
 import typing
 import argparse
 import collections
-import unicodedata
-import pprint
-import contextlib
-import secrets  # instead of random
 
 CRYPT_CHARACTERS = [chr(i) for i in range(ord('!'), ord('~') + 1)]
 
 WIDTH_CIPHER = 17
 HEIGHT_BLOCK = 9
 SHIFT = 2
+
 
 class Cipher:
     """ A cipher : basically a string """
@@ -34,17 +31,18 @@ class Cipher:
                     for code in word:
                         self._content.append(code)
 
-        # the different codes in cipher
+        #  the different codes in cipher
         self._cipher_codes = ''.join(sorted(set(self._content)))
 
-        self._blocks = collections.defaultdict(dict)
-        self._transposed = list()
+        self._blocks: typing.Dict[int, typing.Dict[typing.Tuple[int, int], str]] = collections.defaultdict(dict)
+        self._transposed: typing.List[str] = list()
 
     def print_difficulty(self) -> None:
         """ climb_difficulty """
         print(f"INFORMATION: We have a cipher with {len(self._cipher_codes)} different codes and a length of {len(self._content)}")
 
     def transpose(self) -> None:
+        """ Does the zodiac Z340 transposition to the cipher """
 
         # put in blocks
         for num, cipher in enumerate(self._content):
@@ -55,7 +53,6 @@ class Cipher:
             self._blocks[num_block][(line_in_block, column)] = cipher
 
         # extract from blocks
-        transposed = list()
         for num_block, content_block in self._blocks.items():
 
             # for a complete block
@@ -65,7 +62,7 @@ class Cipher:
                     position = pos_start
 
                     for cur_line in range(HEIGHT_BLOCK):
-                        cur_col =  (pos_start + (SHIFT *  cur_line)) % WIDTH_CIPHER
+                        cur_col = (pos_start + (SHIFT * cur_line)) % WIDTH_CIPHER
                         cipher = self._blocks[num_block][(cur_line, cur_col)]
                         self._transposed.append(cipher)
 
@@ -84,11 +81,8 @@ class Cipher:
         """ property """
         return self._cipher_codes
 
-
     def __str__(self) -> str:
         return ''.join(self._transposed)
-        #return pprint.pformat(self._blocks)
-        #return ''.join(self._content)
 
 
 CIPHER: typing.Optional[Cipher] = None
