@@ -320,7 +320,7 @@ cruel 929
 cuisine 1180
 curieux 738
 curiosite 1037
-d 1734d
+d 1734
 d 2865
 d 3783
 dame 2333
