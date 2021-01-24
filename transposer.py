@@ -58,14 +58,26 @@ class Cipher:
         transposed = list()
         for num_block, content_block in self._blocks.items():
 
-            for pos_start in range(WIDTH_CIPHER):
-                position = pos_start
+            # for a complete block
+            if len(content_block) == HEIGHT_BLOCK * WIDTH_CIPHER:
 
-                for cur_line in range(HEIGHT_BLOCK):
-                    cur_col =  (pos_start + (SHIFT *  cur_line)) % WIDTH_CIPHER
-                    if (cur_line, cur_col) in self._blocks[num_block]:
+                for pos_start in range(WIDTH_CIPHER):
+                    position = pos_start
+
+                    for cur_line in range(HEIGHT_BLOCK):
+                        cur_col =  (pos_start + (SHIFT *  cur_line)) % WIDTH_CIPHER
                         cipher = self._blocks[num_block][(cur_line, cur_col)]
                         self._transposed.append(cipher)
+
+            # for the last incomplete block
+            else:
+                for position in range(HEIGHT_BLOCK * WIDTH_CIPHER):
+                    cur_line = position // WIDTH_CIPHER
+                    cur_col = position % WIDTH_CIPHER
+                    if (cur_line, cur_col) not in self._blocks[num_block]:
+                        break
+                    cipher = self._blocks[num_block][(cur_line, cur_col)]
+                    self._transposed.append(cipher)
 
     @property
     def cipher_codes(self) -> str:
