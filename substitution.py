@@ -75,6 +75,7 @@ class Letters:
                 line = line.rstrip('\n')
                 letter_read, letter_str = line.split()
                 letter = letter_read.lower()
+                assert letter in ALPHABET, "Problem with letters frequencies file content"
                 frequency = int(letter_str)
                 raw_frequency_table[letter] = frequency
 
@@ -106,19 +107,19 @@ class Ngrams:
         before = time.time()
         self._size = 0
 
-        raw_frequency_table: typing.Dict[str, int] = dict()
+        raw_frequency_table: typing.Dict[str, int] = collections.defaultdict(int)
         with open(filename) as filepointer:
-            for line in filepointer:
+            for num_line, line in enumerate(filepointer):
                 line = line.rstrip('\n')
                 n_gram_read, frequency_str = line.split()
                 n_gram = n_gram_read.lower()
                 if self._size:
-                    assert len(n_gram) == self._size, "Problem with ngram file content"
+                    assert len(n_gram) == self._size, f"Problem with ngram file content line {num_line+1}"
                 else:
                     self._size = len(n_gram)
                     print(f"INFORMATION: Using N-Grams with N={self._size}")
                 frequency = int(frequency_str)
-                raw_frequency_table[n_gram] = frequency
+                raw_frequency_table[n_gram] += frequency  # n gram may occur several times after removal of accents
 
         coverage = (len(raw_frequency_table) / (len(ALPHABET) ** self._size)) * 100
         print(f"INFORMATION: Frequency tables covers {coverage:.2f}% of possibilities")
