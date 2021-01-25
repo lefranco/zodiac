@@ -27,13 +27,13 @@ class NgramsDict:
                 nfkd_form = unicodedata.normalize('NFKD', line)
                 only_ascii = nfkd_form.encode('ASCII', 'ignore')
                 only_ascii_str = only_ascii.decode()
-                n_gram_read, frequency_str = only_ascii_str.split()
-                n_gram = n_gram_read
-                if size and len(n_gram) != size:
+                entry_read, frequency_str = only_ascii_str.split()
+                entry = entry_read.upper()
+                if size and len(entry) != size:
                     print(f"Warning: N-Gram frequency file line {num_line} discarded (bad size)")
                     continue
                 frequency = int(frequency_str)
-                self._table[n_gram] += frequency  # n gram or dict entry may occur several times after removal of accents
+                self._table[entry] += frequency  # n gram or dict entry may occur several times after removal of accents
 
         after = time.time()
         elapsed = after - before
@@ -65,7 +65,7 @@ def main() -> None:
     NGRAMS_DICT = NgramsDict(ngrams_dict_file, ngrams_dict_size)
     #  print(NGRAMS_DICT)
 
-    # file to best solution online
+    # file to output
     output_ngrams_dict_file = args.output_ngrams_dict
     with open(output_ngrams_dict_file, 'w') as file_handle:
         print(NGRAMS_DICT, file=file_handle)
