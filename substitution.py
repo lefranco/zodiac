@@ -9,7 +9,7 @@ Decodes an 'substition cipher.
 This is a cipher where :
   - one letter from plain text can be coded in one codes (usually to have even frequency
     of codes in cipher)
-  - the seperation between words is not shown
+  - the separation between words is not shown
 """
 
 import sys
