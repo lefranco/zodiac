@@ -13,8 +13,8 @@ import typing
 import unicodedata
 
 
-class Ngrams:
-    """ Ngrams : says the frequency of N grams (log (occurences / sum all) """
+class NgramsDict:
+    """ NgramsDict """
 
     def __init__(self, filename: str, size: int):
 
@@ -29,42 +29,46 @@ class Ngrams:
                 only_ascii_str = only_ascii.decode()
                 n_gram_read, frequency_str = only_ascii_str.split()
                 n_gram = n_gram_read
-                if len(n_gram) != size:
+                if size and len(n_gram) != size:
+                    print(f"Warning: N-Gram frequency file line {num_line} discarded (bad size)")
                     continue
                 frequency = int(frequency_str)
-                self._table[n_gram] += frequency  # n gram may occur several times after removal of accents
+                self._table[n_gram] += frequency  # n gram or dict entry may occur several times after removal of accents
 
         after = time.time()
         elapsed = after - before
-        print(f"INFORMATION: N-Gram frequency file '{filename}' loaded in {elapsed:2.2f} seconds")
+        print(f"INFORMATION: N-Gram frequency file or Dictionnary '{filename}' loaded in {elapsed:2.2f} seconds")
 
     def __str__(self) -> str:
         """ for debug """
         return "\n".join([f"{k} {self._table[k]}" for k in sorted(self._table, key=lambda k: self._table[k], reverse=True)])
 
 
-NGRAMS: typing.Optional[Ngrams] = None
+NGRAMS_DICT: typing.Optional[NgramsDict] = None
 
 
 def main() -> None:
     """ main """
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('-n', '--n_size', required=True, help='n of ngram')
-    parser.add_argument('-i', '--input_ngrams', required=True, help='input a file with frequency table for n_grams (n-letters)')
-    parser.add_argument('-o', '--output_ngrams', required=True, help='same file repaired')
+    parser.add_argument('-n', '--n_size', required=False, help='n of ngram if ngram file')
+    parser.add_argument('-i', '--input_ngrams_dict', required=True, help='input a file with frequency table for n_grams (n-letters) or words')
+    parser.add_argument('-o', '--output_ngrams_dict', required=True, help='same file repaired')
     args = parser.parse_args()
 
-    ngrams_size = int(args.n_size)
-    ngrams_file = args.input_ngrams
-    global NGRAMS
-    NGRAMS = Ngrams(ngrams_file, ngrams_size)
-    #  print(NGRAMS)
+    if args.n_size is not None:
+        ngrams_dict_size = int(args.n_size)
+    else:
+        ngrams_dict_size = 0
+    ngrams_dict_file = args.input_ngrams_dict
+    global NGRAMS_DICT
+    NGRAMS_DICT = NgramsDict(ngrams_dict_file, ngrams_dict_size)
+    #  print(NGRAMS_DICT)
 
     # file to best solution online
-    output_ngrams_file = args.output_ngrams
-    with open(output_ngrams_file, 'w') as file_handle:
-        print(NGRAMS, file=file_handle)
+    output_ngrams_dict_file = args.output_ngrams_dict
+    with open(output_ngrams_dict_file, 'w') as file_handle:
+        print(NGRAMS_DICT, file=file_handle)
 
 
 if __name__ == '__main__':
