@@ -9,7 +9,7 @@ Decodes an 'homophonic cipher.
 This is a cipher where :
   - one letter from plain text can be coded in one or more codes (usually to have even frequency
     of codes in cipher)
-  - the seperation between words is not shown
+  - the separation between words is not shown
 """
 
 import sys
@@ -101,7 +101,7 @@ LETTERS: typing.Optional[Letters] = None
 class Ngrams:
     """ Ngrams : says the frequency of N grams (log (occurences / sum all) """
 
-    def __init__(self, filename: str):
+    def __init__(self, filename: str, bad_quality: bool):
 
         before = time.time()
         self._size = 0
@@ -128,7 +128,11 @@ class Ngrams:
         # for normal values
         self._log_freq_table = {q: math.log10(raw_frequency_table[q] / sum_occurences) for q in raw_frequency_table}
 
-        self._worst_frequency = math.log10(EPSILON_NO_OCCURENCES / sum_occurences)
+        if bad_quality:
+            min_frequency = min(raw_frequency_table.values())
+            self._worst_frequency = math.log10(min_frequency / sum_occurences)
+        else:
+            self._worst_frequency = math.log10(EPSILON_NO_OCCURENCES / sum_occurences)
 
         after = time.time()
         elapsed = after - before
@@ -877,6 +881,7 @@ def main() -> None:
     parser.add_argument('-L', '--limit', required=False, help='limit for the dictionary words to use')
     parser.add_argument('-l', '--letters', required=True, help='input a file with frequency table for letters')
     parser.add_argument('-c', '--cipher', required=True, help='cipher to attack')
+    parser.add_argument('-b', '--bad_quality', action='store_true', help='Cipher is bad quality')
     parser.add_argument('-o', '--output_solutions', required=False, help='file where to output successive solutions')
     args = parser.parse_args()
 
@@ -895,8 +900,9 @@ def main() -> None:
     #  print(LETTERS)
 
     ngrams_file = args.ngrams
+    bad_quality = args.bad_quality
     global NGRAMS
-    NGRAMS = Ngrams(ngrams_file)
+    NGRAMS = Ngrams(ngrams_file, bad_quality)
     #  print(NGRAMS)
 
     dictionary_file = args.dictionary
