@@ -425,33 +425,35 @@ class Evaluation:
         self._n_grams_frequency_quality = n_grams_frequency_quality
         self._anti_entropy_quality = anti_entropy_quality
 
-        # multiply seeems to work, other options seem to only get worse...
         # 'self._n_grams_frequency_quality' is negative and must be as close as possible to zero (higher frequency)
         # 'self._anti_entropy_quality' (opposite of entropy)  is positive and must be as close as possible to zero (higher entropy)
-        self._quality = self._n_grams_frequency_quality * self._anti_entropy_quality
 
-    def delta(self, other: 'Evaluation') -> float:
-        """ delta """
-        return (self._quality - other.quality) / other.quality
+    def delta_diff(self, other: 'Evaluation') -> float:
+        """ delta diff self.delta_diff(other) is positive if self is better than other """
 
-    @property
-    def quality(self) -> float:
-        """ property """
-        return self._quality
+        # delta n_grams_frequency
+        delta_n_grams_frequency = - (abs(self.n_grams_frequency_quality) - abs(other.n_grams_frequency_quality)) / abs(other.n_grams_frequency_quality)
 
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, Evaluation):
-            return NotImplemented
-        return abs(self._quality - other.quality) < EPSILON_DELTA_FLOAT
+        # delta anti_entropy_quality
+        delta_anti_entropy_quality = - (self.anti_entropy_quality - other.anti_entropy_quality) / other.anti_entropy_quality
+
+        return (delta_n_grams_frequency + delta_anti_entropy_quality) / 2.
 
     def __gt__(self, other: 'Evaluation') -> bool:
-        return self._quality > other.quality + EPSILON_DELTA_FLOAT
+        return self.delta_diff(other) > EPSILON_DELTA_FLOAT
 
-    def __ge__(self, other: 'Evaluation') -> bool:
-        return self._quality > other.quality or self._quality == other.quality
+    @property
+    def n_grams_frequency_quality(self) -> float:
+        """ property """
+        return self._n_grams_frequency_quality
+
+    @property
+    def anti_entropy_quality(self) -> float:
+        """ property """
+        return self._anti_entropy_quality
 
     def __str__(self) -> str:
-        return f"ngram qual={self._n_grams_frequency_quality} anti entropy qual={self._anti_entropy_quality} quality={self._quality}"
+        return f"ngram qual={self._n_grams_frequency_quality} anti entropy qual={self._anti_entropy_quality}"
 
 
 class Solution:
@@ -643,10 +645,10 @@ class Attacker:
             new_evaluation = Evaluation(self._overall_n_grams_frequency_quality, self._overall_anti_entropy_quality)
 
             # quality should lower in this context
-            assert new_evaluation <= old_evaluation
+            delta_quality_percent = new_evaluation.delta_diff(old_evaluation)
+            assert delta_quality_percent <= 0
 
-            delta_quality_percent = abs(new_evaluation.delta(old_evaluation))
-            proba_acceptance = math.exp(- delta_quality_percent / (K_TEMPERATURE_FACTOR * self._temperature))
+            proba_acceptance = math.exp(- abs(delta_quality_percent) / (K_TEMPERATURE_FACTOR * self._temperature))
 
             # apply acceptance probability function
             if decide_accept(proba_acceptance):
@@ -957,10 +959,10 @@ def main() -> None:
 
         # show new bucket
         print("=============================================")
-        print(f"Process {num_process} yields a solution with quality={quality_reached} at speed={speed} swaps per sec")
+        print(f"Process {num_process} yields a solution with quality={quality_reached} at speed={int(speed)} swaps per sec")
 
         # if beaten global : update and show stuff
-        if best_quality_reached is None or quality_reached > best_quality_reached or quality_reached == best_quality_reached:
+        if best_quality_reached is None or quality_reached > best_quality_reached:
             solution = Solution(quality_reached, key_reached)
             solution.print_solution(sys.stdout)
             if output_solutions_file is not None:

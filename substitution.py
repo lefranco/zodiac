@@ -822,10 +822,10 @@ def main() -> None:
 
         # show new bucket
         print("=============================================")
-        print(f"Yield a solution with quality={quality_reached} at speed={speed} swaps per sec")
+        print(f"Yield a solution with quality={quality_reached} at speed={int(speed)} swaps per sec")
 
         # if beaten global : update and show stuff
-        if best_quality_reached is None or quality_reached > best_quality_reached or quality_reached == best_quality_reached:
+        if best_quality_reached is None or quality_reached > best_quality_reached:
             solution = Solution(quality_reached, key_reached)
             solution.print_solution(sys.stdout)
             if output_solutions_file is not None:
