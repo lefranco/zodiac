@@ -28,18 +28,21 @@ class Plain:
             for line in filepointer:
                 line = line.rstrip('\n')
                 if line:
+                    # remove accents
                     nfkd_form = unicodedata.normalize('NFKD', line)
                     only_ascii = nfkd_form.encode('ASCII', 'ignore')
                     only_ascii_str = only_ascii.decode()
-                    for word in only_ascii_str.split():
+                    # remove all bujt alphabet and spaces
+                    bad_chars = ''.join(list({ll for  ll in only_ascii_str if not (ll  in ALPHABET or ll == ' ')}))
+                    my_table = only_ascii_str.maketrans(bad_chars, ' ' * len(bad_chars))
+                    letters_spaces_only = only_ascii_str.translate(my_table)
+                    # now we can work
+                    for word in letters_spaces_only.split():
                         word = word.upper()
-                        word = ''.join([ll for ll in word if ll.lower() in ALPHABET])
-                        if word:
-                            #print(word, end = ' ')
-                            self._words.append(word)
-                            for letter in word:
-                                if letter.lower() in ALPHABET:
-                                    letters.append(letter)
+                        assert word
+                        self._words.append(word)
+                        for letter in word:
+                            letters.append(letter)
 
         self._plain_str = ''.join(letters)
 
