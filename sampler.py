@@ -21,9 +21,9 @@ class Plain:
 
     def __init__(self, filename: str) -> None:
 
-        self._letters: typing.List[str] = list()
         self._words: typing.List[str] = list()
 
+        letters: typing.List[str] = list()
         with open(filename, encoding='utf-8') as filepointer:
             for line in filepointer:
                 line = line.rstrip('\n')
@@ -35,12 +35,13 @@ class Plain:
                         word = word.upper()
                         word = ''.join([ll for ll in word if ll.lower() in ALPHABET])
                         if word:
+                            #print(word, end = ' ')
                             self._words.append(word)
                             for letter in word:
                                 if letter.lower() in ALPHABET:
-                                    self._letters.append(letter)
+                                    letters.append(letter)
 
-        self._plain_str = ''.join(self._letters)
+        self._plain_str = ''.join(letters)
 
     def stats_ngrams(self, file_handle: typing.TextIO, n_value: int) -> None:
         """ stats """
@@ -63,9 +64,6 @@ class Plain:
             for word in sorted(word_count, key=lambda w: word_count[w], reverse=True):
                 num = word_count[word]
                 print(f"{word} {num}")
-
-    def __str__(self) -> str:
-        return self._plain_str
 
 
 PLAIN: typing.Optional[Plain]
