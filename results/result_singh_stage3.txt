@@ -1,0 +1,16 @@
+==================================================
+o frati dissi che per cento milia perigli siete giunti al occidente a questa tanto picciola vigilia de nostri sensi che del rimanente non vogliate negar l esperienza di retro al sol del m ond osenza gente c onsiderate la vostra semenza fa ti non foste a viver come bruti ma per seguir virtute e canoscenza li miei compagni feci osi aguti con questa orazion picciola al cammino che a pena poscia li avrei ritenuti e volta nostra poppa nel mattino de ire mi facemmo ali al folle volo sempre acquistando dallato mancino tutte le stelle gia del altro polo vedea la notte e l nostro tanto basso che non surgea fuor del marin suolo cinque volte racceso e tanto casso lo lume era di sotto da la luna poi che ntrati eravam nel alto passo quando n apparve una montagna bruna per la distanza e parvemi alta tanto quanto veduta non avea alcuna noi ci allegrammo e tosto torno in pianto che de la nova terra un turbo nacque e percosse del legno il primo canto tre volte il fe girar con tutte l acque a la quarta levar la poppa in suso e la prora ire in giu com altrui piacque infin che l mar fu sopra noi richiuso la parola in co dice e e qua t or
+==================================================
+index_of_coincidence=1.9106025277708027 (reference=1.94)
+dictionary_quality=-680.4822358478389
+quality=ngram qual=-5706.1650083226605 anti entropy qual=5364.883831454136
+time taken=176.62654280662537 sec.
+--------------------------
+abcdefghijklmnopqrstuvwxyz
+BASLQDJOF  *WTIYRVEUPK   H
+C                         
+G                         
+M                         
+N                         
+Z                         
+--------------------------
