@@ -763,7 +763,6 @@ def main() -> None:
     """ main """
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('-p', '--processes', required=True, help='how many processes to use')
     parser.add_argument('-i', '--ioc', required=True, help='input a file with index coincidence for language')
     parser.add_argument('-n', '--ngrams', required=True, help='input a file with frequency table for n_grams (n-letters)')
     parser.add_argument('-d', '--dictionary', required=True, help='input a file with frequency table for words (dictionary) to use')
@@ -773,9 +772,6 @@ def main() -> None:
     parser.add_argument('-b', '--bad_quality', action='store_true', help='Cipher is bad quality')
     parser.add_argument('-o', '--output_solutions', required=False, help='file where to output successive solutions')
     args = parser.parse_args()
-
-    n_processes = int(args.processes)
-    print(f"INFORMATION: Using {n_processes} processes")
 
     ref_ioc_file = args.ioc
     if ref_ioc_file is not None:
