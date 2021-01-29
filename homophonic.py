@@ -39,6 +39,8 @@ RECURSION_LIMIT = 5000  # default is 1000 - this is only for when putting spaces
 VERY_BAD_DICTIONNARY = - 1e99
 
 ALPHABET = [chr(i) for i in range(ord('a'), ord('z') + 1)]  # plain always lower case
+CRYPT_CHARACTERS = [chr(i) for i in range(ord('!'), ord('~') + 1)]
+
 EPSILON_NO_OCCURENCES = 1e-99  # zero has - infinite as log, must be << 1
 EPSILON_DELTA_FLOAT = 0.000001  # to compare floats (for debug check)
 
@@ -252,6 +254,7 @@ class Cipher:
                 line = line.rstrip('\n')
                 for word in line.split():
                     for code in word:
+                        assert code in CRYPT_CHARACTERS, f"Problem in homophonic cipher with code {code}"
                         self._content.append(code)
 
         # the cipher as it appears
