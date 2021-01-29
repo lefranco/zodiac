@@ -39,7 +39,7 @@ RECURSION_LIMIT = 5000  # default is 1000 - this is only for when putting spaces
 VERY_BAD_DICTIONNARY = - 1e99
 
 ALPHABET = [chr(i) for i in range(ord('a'), ord('z') + 1)]  # plain always lower case
-CRYPT_CHARACTERS = [chr(i) for i in range(ord('!'), ord('~') + 1)]
+CRYPT_CHARACTERS = [chr(i) for i in range(ord('!'), ord('~') + 1)] + [chr(i) for i in range(ord('À'), ord('ÿ') + 1)]
 
 EPSILON_NO_OCCURENCES = 1e-99  # zero has - infinite as log, must be << 1
 EPSILON_DELTA_FLOAT = 0.000001  # to compare floats (for debug check)

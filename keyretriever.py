@@ -15,7 +15,7 @@ import itertools
 import sys
 
 ALPHABET = [chr(i) for i in range(ord('a'), ord('z') + 1)]
-CRYPT_CHARACTERS = [chr(i) for i in range(ord('!'), ord('~') + 1)]
+CRYPT_CHARACTERS = [chr(i) for i in range(ord('!'), ord('~') + 1)] + [chr(i) for i in range(ord('À'), ord('ÿ') + 1)]
 
 
 class Plain:
