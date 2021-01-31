@@ -8,6 +8,7 @@ Output : key
 
 import typing
 import argparse
+import unicodedata
 
 import PIL
 from PIL import Image
@@ -20,10 +21,46 @@ CHAR_WIDTH = 30
 CHAR_HEIGHT = 50
 
 PAGE_WIDTH = 1200
-PAGE_HEIGHT = 1200
+PAGE_HEIGHT = 2400
 
 BIG_FONT_SIZE = 40
 SMALL_FONT_SIZE = 30
+
+
+
+class Plain:
+    """ A cipher : basically a string """
+
+    def __init__(self, filename: str) -> None:
+
+        self._clear_content: typing.List[str] = list()
+
+        with open(filename) as filepointer:
+            for line in filepointer:
+                line = line.rstrip('\n')
+                if line:
+                    nfkd_form = unicodedata.normalize('NFKD', line)
+                    only_ascii = nfkd_form.encode('ASCII', 'ignore')
+                    only_ascii_str = only_ascii.decode()
+                    for word in only_ascii_str.split():
+                        word = word.lower()
+                        for letter in word:
+                            if letter not in ALPHABET:
+                                continue
+                            self._clear_content.append(letter)
+
+
+    def display(self, img_page: typing.Any) -> None:
+        """ output to old fashion text """
+
+        pass #assert False, "TODO"
+
+    def __str__(self) -> str:
+        return ''.join(self._clear_content)
+
+
+PLAIN: typing.Optional[Plain] = None
+
 
 class CipherRecord(typing.NamedTuple):
     """ A single cipher  """
@@ -67,7 +104,6 @@ class Cipher:
                 line = line.rstrip('\n')
                 if not line:
                     continue
-                print(line)
                 line_ciphers: typing.List[CipherRecord] = list()
                 for word in line.split():
                     letter = word[0]
@@ -83,22 +119,19 @@ class Cipher:
                     line_ciphers.append(cipher)
                 self._content.append(line_ciphers)
 
-    def display(self, file_name: str) -> None:
+    def display(self, img_page: typing.Any) -> None:
         """ output to old fashion text """
 
-        img_page = PIL.Image.new('RGB', (PAGE_WIDTH, PAGE_HEIGHT), color="white")
         cur_pos = (0, 0)
         for line_ciphers in self._content:
             for cipher in line_ciphers:
-                #print(f"{cipher} goes in {cur_pos}")
                 img_char = cipher.display()
-                assert cur_pos[0] + CHAR_WIDTH <= PAGE_WIDTH, "Display horizonral overflow"
+                assert cur_pos[0] + CHAR_WIDTH <= PAGE_WIDTH, "Display horizontal overflow"
                 assert cur_pos[1] + CHAR_HEIGHT <= PAGE_HEIGHT, "Display vertical overflow"
                 img_page.paste(img_char, cur_pos)
                 cur_pos = (cur_pos[0] + CHAR_WIDTH, cur_pos[1])
-            cur_pos = (0, cur_pos[1] + CHAR_HEIGHT)
+            cur_pos = (0, cur_pos[1] + 2 * CHAR_HEIGHT)
 
-        img_page.save(file_name)
 
     def output(self, file_name: str) -> None:
         """ make cipher for solver """
@@ -116,10 +149,18 @@ def main() -> None:
     """ main """
 
     parser = argparse.ArgumentParser()
+    parser.add_argument('-p', '--plain_input', required=False, help='input file with plain (can have spaces within - will be removed - can have accents - will be corrected)')
     parser.add_argument('-i', '--input', required=True, help='input file with cipher')
-    parser.add_argument('-d', '--dump', required=False, help='dump cipher as picture to file')
+    parser.add_argument('-d', '--dump', required=False, help='dump cipher and plain as picture to file')
     parser.add_argument('-o', '--output', required=False, help='output cipher to file')
     args = parser.parse_args()
+
+    # load plain
+    plain_input_file = args.plain_input
+    global PLAIN
+    PLAIN = Plain(plain_input_file)
+    print("Plain:")
+    print(PLAIN)
 
     # load cipher
     cipher_input_file = args.input
@@ -130,7 +171,10 @@ def main() -> None:
 
     cipher_dump_file = args.dump
     if cipher_dump_file:
-        CIPHER.display(cipher_dump_file)
+        img_page = PIL.Image.new('RGB', (PAGE_WIDTH, PAGE_HEIGHT), color="white")
+        CIPHER.display(img_page)
+        PLAIN.display(img_page)
+        img_page.save(cipher_dump_file)
 
     cipher_output_file = args.output
     if cipher_output_file:
