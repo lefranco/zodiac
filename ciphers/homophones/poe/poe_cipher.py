@@ -19,9 +19,11 @@ ALPHABET = [chr(i) for i in range(ord('a'), ord('z') + 1)]
 CHAR_WIDTH = 30
 CHAR_HEIGHT = 50
 
-PAGE_WIDTH = 1000
+PAGE_WIDTH = 1200
 PAGE_HEIGHT = 1000
 
+BIG_FONT_SIZE = 40
+SMALL_FONT_SIZE = 30
 
 class CipherRecord(typing.NamedTuple):
     """ A single cipher  """
@@ -34,7 +36,7 @@ class CipherRecord(typing.NamedTuple):
 
         img_char = Image.new('RGB', (CHAR_WIDTH, CHAR_HEIGHT), color="white")
         draw = ImageDraw.Draw(img_char)
-        font = ImageFont.truetype('/Library/Fonts/FreeSerif.ttf', 35 if self.bigger else 25)
+        font = ImageFont.truetype('/Library/Fonts/FreeSerif.ttf', BIG_FONT_SIZE if self.bigger else SMALL_FONT_SIZE)
         char = self.letter
         width_font, height_font = draw.textsize(char, font=font)
 
@@ -58,38 +60,43 @@ class Cipher:
     def __init__(self, filename: str) -> None:
 
         # cipher content : list of Cipher records
-        self._content: typing.List[CipherRecord] = list()
+        self._content: typing.List[typing.List[CipherRecord]] = list()
 
         with open(filename) as filepointer:
             for num_line, line in enumerate(filepointer):
                 line = line.rstrip('\n')
                 if not line:
                     continue
-                tab = line.split()
-                letter = tab[0]
-                assert len(letter) == 1, f"Problem line {num_line+1} : must have a signle letter"
-                assert letter.lower() in ALPHABET, f"Problem line {num_line+1} : letter mlust be in alphabet"
-                assert len(tab) in [1, 2], f"Problem line {num_line+1} : letter and possibly attributes"
-                if len(tab) == 2:
-                    attributes = tab[1]
-                    assert all([a in ['+', 'u'] for a in attributes]), f"Problem line {num_line+1} : bad attributes: {attributes}"
-                else:
-                    attributes = ''
-                cipher = CipherRecord(letter=letter, bigger='+' in attributes, upside_down='u' in attributes)
-                self._content.append(cipher)
+                print(line)
+                line_ciphers: typing.List[CipherRecord] = list()
+                for word in line.split():
+                    letter = word[0]
+                    assert letter.lower() in ALPHABET, f"Problem line {num_line+1} : letter must be in alphabet"
+                    assert len(word) <= 3, f"Problem line {num_line+1} : {word} limit to letter and possibly attributes"
+                    if len(word) > 1:
+                        attributes = word[1:]
+                        assert all([a in ['+', 'u'] for a in attributes]), f"Problem line {num_line+1} : bad attributes: {attributes}"
+                    else:
+                        attributes = ''
+                    assert not(letter.islower() and '+' in attributes), f"Problem line {num_line+1} : presumambly no lower bigger..."
+                    cipher = CipherRecord(letter=letter, bigger='+' in attributes, upside_down='u' in attributes)
+                    line_ciphers.append(cipher)
+                self._content.append(line_ciphers)
 
     def display(self, file_name: str) -> None:
         """ output to old fashion text """
 
         img_page = PIL.Image.new('RGB', (PAGE_WIDTH, PAGE_HEIGHT), color="white")
         cur_pos = (0, 0)
-        for cipher in self._content:
-            #print(f"{cipher} goes in {cur_pos}")
-            img_char = cipher.display()
-            img_page.paste(img_char, cur_pos)
-            cur_pos = (cur_pos[0] + CHAR_WIDTH, cur_pos[1])
-            if cur_pos[0] + CHAR_WIDTH > PAGE_WIDTH:
-                cur_pos = (0, cur_pos[1] + CHAR_HEIGHT)
+        for line_ciphers in self._content:
+            for cipher in line_ciphers:
+                #print(f"{cipher} goes in {cur_pos}")
+                img_char = cipher.display()
+                assert cur_pos[0] + CHAR_WIDTH <= PAGE_WIDTH, "Display horizonral overflow"
+                assert cur_pos[1] + CHAR_HEIGHT <= PAGE_HEIGHT, "Display vertical overflow"
+                img_page.paste(img_char, cur_pos)
+                cur_pos = (cur_pos[0] + CHAR_WIDTH, cur_pos[1])
+            cur_pos = (0, cur_pos[1] + CHAR_HEIGHT)
 
         img_page.save(file_name)
 
@@ -99,7 +106,7 @@ class Cipher:
         assert False, "Not implemented"
 
     def __str__(self) -> str:
-        return ' '.join([str(c) for c in self._content])
+        return '\n'.join([' '.join([str(c) for c in l]) for l in self._content])
 
 
 CIPHER: typing.Optional[Cipher] = None
