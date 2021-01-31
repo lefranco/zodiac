@@ -137,7 +137,6 @@ class Cipher:
                         assert all([a in ['+', 'u'] for a in attributes]), f"Problem line {num_line+1} : bad attributes: {attributes}"
                     else:
                         attributes = ''
-                    assert not(letter.islower() and '+' in attributes), f"Problem line {num_line+1} : presumambly no lower bigger..."
                     cipher = CipherRecord(letter=letter, bigger='+' in attributes, upside_down='u' in attributes)
                     line_ciphers.append(cipher)
                 self._content.append(line_ciphers)
