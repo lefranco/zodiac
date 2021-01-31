@@ -9,6 +9,10 @@ Output : key
 import typing
 import argparse
 import unicodedata
+import collections
+import contextlib
+import sys
+import itertools
 
 import PIL
 from PIL import Image
@@ -16,6 +20,7 @@ from PIL import ImageDraw
 from PIL import ImageFont
 
 ALPHABET = [chr(i) for i in range(ord('a'), ord('z') + 1)]
+CRYPT_CHARACTERS = [chr(i) for i in range(ord('!'), ord('~') + 1)] + [chr(i) for i in range(ord('À'), ord('ÿ') + 1)]
 
 CHAR_WIDTH = 30
 CHAR_HEIGHT = 50
@@ -69,7 +74,6 @@ class Plain:
 
         cur_pos = (0, CHAR_HEIGHT)
         for line_plains in self._content:
-            print(''.join(line_plains))
             for plain in line_plains:
                 img_char = display_char(plain)
                 assert cur_pos[0] + CHAR_WIDTH <= PAGE_WIDTH, "Display horizontal overflow"
@@ -77,6 +81,11 @@ class Plain:
                 img_page.paste(img_char, cur_pos)
                 cur_pos = (cur_pos[0] + CHAR_WIDTH, cur_pos[1])
             cur_pos = (0, cur_pos[1] + 2 * CHAR_HEIGHT)
+
+    @property
+    def content(self) -> typing.List[typing.List[str]]:
+        """ property """
+        return self._content
 
     def __str__(self) -> str:
         return '\n'.join([' '.join([str(c) for c in ll]) for ll in self._content])
@@ -154,10 +163,26 @@ class Cipher:
                 cur_pos = (cur_pos[0] + CHAR_WIDTH, cur_pos[1])
             cur_pos = (0, cur_pos[1] + 2 * CHAR_HEIGHT)
 
-    def output(self, file_name: str) -> None:
+    def output(self, file_handle: typing.TextIO) -> None:
         """ make cipher for solver """
 
-        assert False, "Not implemented"
+        available = set(CRYPT_CHARACTERS)
+        convert_table = dict()
+
+        with contextlib.redirect_stdout(file_handle):
+            for line_ciphers in self._content:
+                for cipher in line_ciphers:
+                    if cipher not in convert_table:
+                        code = available.pop()
+                        convert_table[cipher] = code
+
+                    print(code, end=' ')
+                print("\n")
+
+    @property
+    def content(self) -> typing.List[typing.List[CipherRecord]]:
+        """ property """
+        return self._content
 
     def __str__(self) -> str:
         return '\n'.join([' '.join([str(c) for c in ll]) for ll in self._content])
@@ -166,29 +191,87 @@ class Cipher:
 CIPHER: typing.Optional[Cipher] = None
 
 
+class Crypter:
+    """ A crypter : basically a dictionnary """
+
+    def __init__(self) -> None:
+
+        assert PLAIN is not None
+        assert CIPHER is not None
+
+        # rebuild key
+        self._table: typing.Dict[str, typing.Set[CipherRecord]] = collections.defaultdict(set)
+        self._reverse_table: typing.Dict[CipherRecord, str] = dict()
+
+        plain_str = ''.join([''.join([str(c) for c in ll]) for ll in PLAIN.content])
+        ciphers = [c for ll in CIPHER.content for c in ll]
+
+        if len(plain_str) != len(ciphers):
+            print(f"ERROR: Cipher len={len(plain_str)} and plain len={len(ciphers)} do not have same length")
+            sys.exit(1)
+
+        # need a mapping to inform user where the error is
+        mapping = [(line, char_pos) for line, ll in enumerate(PLAIN.content) for char_pos, _ in enumerate(ll)]
+
+        first_met: typing.Dict[CipherRecord, int] = dict()
+
+        for pos, (plain, cipher) in enumerate(zip(plain_str, ciphers)):
+            self._table[plain].add(cipher)
+
+            if cipher not in self._reverse_table:
+                self._reverse_table[cipher] = plain
+                first_met[cipher] = pos
+            else:
+                should_be_plain = self._reverse_table[cipher]
+                if should_be_plain != plain:
+
+                    # print error
+                    line, char_pos = mapping[pos]
+                    first_pos = first_met[cipher]
+                    first_line, first_char_pos = mapping[first_pos]
+                    print(f"ERROR: Cipher '{cipher}' (line {line+1} character {char_pos+1}) is now '{plain}' but was previously '{self._reverse_table[cipher]}' (line {first_line+1} character {first_char_pos+1})")
+
+                    # helps decision
+                    matches = [p for p, c in zip(plain_str, ciphers) if c == cipher]
+                    count = collections.Counter(matches)
+                    print(f"Count : {count}")
+
+                    sys.exit(1)
+
+        # check
+        plain_letters = {c for ll in PLAIN.content for c in ll}
+        for plain1, plain2 in itertools.combinations(plain_letters, 2):
+            common = self._table[plain1] & self._table[plain2]
+            common_show = ' '.join([str(c) for c in common])
+            assert not common, f"Conflict for plains {plain1} and {plain2} both encoded by ciphers {common_show}"
+
+
+CRYPTER: typing.Optional[Crypter]
+
+
 def main() -> None:
     """ main """
 
     parser = argparse.ArgumentParser()
     parser.add_argument('-p', '--plain_input', required=False, help='input file with plain (can have spaces within - will be removed - can have accents - will be corrected)')
-    parser.add_argument('-i', '--input', required=True, help='input file with cipher')
+    parser.add_argument('-c', '--cipher', required=True, help='input file with cipher in descriptive form')
     parser.add_argument('-d', '--dump', required=False, help='dump cipher and plain as picture to file')
-    parser.add_argument('-o', '--output', required=False, help='output cipher to file')
+    parser.add_argument('-o', '--output', required=False, help='output cipher to file in usuable form')
     args = parser.parse_args()
 
     # load plain
     plain_input_file = args.plain_input
     global PLAIN
     PLAIN = Plain(plain_input_file)
-    print("Plain:")
-    print(PLAIN)
+    #  print("Plain:")
+    #  print(PLAIN)
 
     # load cipher
-    cipher_input_file = args.input
+    cipher_input_file = args.cipher
     global CIPHER
     CIPHER = Cipher(cipher_input_file)
-    print("Cipher:")
-    print(CIPHER)
+    #  print("Cipher:")
+    #  print(CIPHER)
 
     cipher_dump_file = args.dump
     if cipher_dump_file:
@@ -197,9 +280,13 @@ def main() -> None:
         PLAIN.display(img_page)
         img_page.save(cipher_dump_file)
 
+    global CRYPTER
+    CRYPTER = Crypter()
+
     cipher_output_file = args.output
     if cipher_output_file:
-        CIPHER.output(cipher_output_file)
+        with open(cipher_output_file, 'w') as file_handle:
+            CIPHER.output(file_handle)
 
 
 if __name__ == '__main__':
