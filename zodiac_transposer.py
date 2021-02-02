@@ -66,7 +66,14 @@ class Cipher:
                         cipher = self._blocks[num_block][(cur_line, cur_col)]
                         self._transposed.append(cipher)
 
+                # just first block will be enough
+                # the second hs two issues :
+                # the upper left if fixed
+                # one letter is ignored
+                break
+
             # for the last incomplete block
+            # note : it is completely mixed
             else:
                 for position in range(HEIGHT_BLOCK * WIDTH_CIPHER):
                     cur_line = position // WIDTH_CIPHER
