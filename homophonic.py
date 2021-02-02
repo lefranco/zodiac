@@ -502,7 +502,7 @@ class Solution:
 class Attacker:
     """ Attacker """
 
-    def __init__(self) -> None:
+    def __init__(self, show_stats: bool) -> None:
 
         assert CIPHER is not None
 
@@ -523,6 +523,10 @@ class Attacker:
 
         # simulated annealing
         self._temperature = 0.
+
+        # stats about the climb
+        self._show_stats = show_stats
+        self._stats:typing.List[typing.Tuple[float, float]] = list()
 
     def _check_n_gram_frequency_quality(self) -> None:
         """ Evaluates quality from n_gram frequency DEBUG """
@@ -735,7 +739,15 @@ class Attacker:
 
                     quality = Evaluation(self._overall_n_grams_frequency_quality, self._overall_anti_entropy_quality)
                     print(f"Process {self._num} reached a peak at qual={quality}")
+
+                    if self._show_stats:
+                        print("Stats of the climb :")
+                        print("\n".join([f"{s[0]} {s[1]}" for s in self._stats]))
+
                     return
+
+            # stats
+            self._stats.append((self._overall_n_grams_frequency_quality, self._overall_anti_entropy_quality))
 
     def _reset_frequencies(self) -> None:
         """ reset_frequencies """
@@ -888,6 +900,7 @@ def main() -> None:
     parser.add_argument('-c', '--cipher', required=True, help='cipher to attack')
     parser.add_argument('-b', '--bad_quality', action='store_true', help='Cipher is bad quality')
     parser.add_argument('-o', '--output_solutions', required=False, help='file where to output successive solutions')
+    parser.add_argument('-s', '--show_stats', required=False, help='file where to output stats on hill climbing')
     args = parser.parse_args()
 
     n_processes = int(args.processes)
@@ -927,7 +940,8 @@ def main() -> None:
     DECRYPTER = Decrypter()
 
     global ATTACKER
-    ATTACKER = Attacker()
+    show_stats = args.show_stats
+    ATTACKER = Attacker(show_stats)
 
     # file to best solution online
     output_solutions_file = args.output_solutions
