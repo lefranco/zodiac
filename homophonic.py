@@ -61,7 +61,7 @@ def load_reference_coincidence_index(filename: str) -> None:
             line = line.rstrip('\n')
             global REF_IOC
             REF_IOC = float(line)
-            print(f"INFORMATION: Reference IOC is {REF_IOC}")
+            print(f"INFORMATION: Reference IOC is {REF_IOC}.")
             return
 
 
@@ -118,12 +118,12 @@ class Ngrams:
                     assert len(n_gram) == self._size, f"Problem with ngram file content line {num_line+1}"
                 else:
                     self._size = len(n_gram)
-                    print(f"INFORMATION: Using N-Grams with N={self._size}")
+                    print(f"INFORMATION: Using N-Grams with N={self._size}.")
                 frequency = int(frequency_str)
                 raw_frequency_table[n_gram] += frequency  # n gram may occur several times after removal of accents
 
         coverage = (len(raw_frequency_table) / (len(ALPHABET) ** self._size)) * 100
-        print(f"INFORMATION: Frequency tables covers {coverage:.2f}% of possibilities")
+        print(f"INFORMATION: Frequency tables covers {coverage:.2f}% of possibilities.")
 
         sum_occurences = sum(raw_frequency_table.values())
 
@@ -138,7 +138,7 @@ class Ngrams:
 
         after = time.time()
         elapsed = after - before
-        print(f"INFORMATION: N-Gram frequency file '{filename}' loaded in {elapsed:2.2f} seconds")
+        print(f"INFORMATION: N-Gram frequency file '{filename}' loaded in {elapsed:2.2f} seconds.")
 
     @property
     def size(self) -> int:
@@ -179,7 +179,7 @@ class Dictionary:
                 word, frequency_str = line.split()
                 word = word.lower()
 
-                assert not [ll for ll in word if ll not in ALPHABET], f"ERROR : bad word found in dictionary line {line_num+1} : <{word}>"
+                assert not [ll for ll in word if ll not in ALPHABET], f"ERROR : bad word found in dictionary line {line_num+1} : <{word}>."
 
                 if word in raw_frequency_table:
                     print(f"WARNING : duplicated word '{word}' for dictionary line {line_num+1}")
@@ -189,7 +189,7 @@ class Dictionary:
                 raw_frequency_table[word] = frequency
 
                 if limit is not None and len(raw_frequency_table) >= limit:
-                    print(f"INFORMATION: Ignoring dictionary words after the {limit}th")
+                    print(f"INFORMATION: Ignoring dictionary words after the {limit}th.")
                     break
 
         # pass two : enter data
@@ -202,7 +202,7 @@ class Dictionary:
 
         after = time.time()
         elapsed = after - before
-        print(f"INFORMATION: Dictionary (word list) file '{filename}' loaded in {elapsed:2.2f} seconds")
+        print(f"INFORMATION: Dictionary (word list) file '{filename}' loaded in {elapsed:2.2f} seconds.")
 
     def extracted_words(self, plain: str) -> typing.Tuple[float, typing.List[str]]:
         """ Tells the  of (more or less) plain text from the dictionary  """
@@ -283,7 +283,7 @@ class Cipher:
 
     def print_difficulty(self) -> None:
         """ climb_difficulty """
-        print(f"INFORMATION: We have a cipher with {len(self._cipher_codes)} different codes and a length of {len(self._content)}")
+        print(f"INFORMATION: We have a cipher with {len(self._cipher_codes)} different codes and a length of {len(self._content)}.")
 
     @property
     def cipher_codes(self) -> str:
@@ -891,7 +891,7 @@ def main() -> None:
     args = parser.parse_args()
 
     n_processes = int(args.processes)
-    print(f"INFORMATION: Using {n_processes} processes")
+    print(f"INFORMATION: Using {n_processes} processes.")
     if PROFILE:
         assert n_processes == 1, "One processs when profiling"
 
@@ -906,6 +906,8 @@ def main() -> None:
 
     ngrams_file = args.ngrams
     bad_quality = args.bad_quality
+    if bad_quality:
+        print(f"INFORMATION: Cipher is bad quality.")
     global NGRAMS
     NGRAMS = Ngrams(ngrams_file, bad_quality)
     #  print(NGRAMS)
