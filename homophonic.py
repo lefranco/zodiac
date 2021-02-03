@@ -48,7 +48,7 @@ EPSILON_DELTA_FLOAT = 0.000001  # to compare floats (for debug check)
 MAX_ATTACKER_CLIMBS = 1
 
 K_TEMPERATURE_ZERO = 1000.   # by convention keep it that way
-K_TEMPERATURE_REDUCTION = 0.05   # tuned ! - less : too slow - more : not efficient
+K_TEMPERATURE_REDUCTION = 0.075   # tuned ! - less : too slow - more : not efficient
 K_TEMPERATURE_FACTOR = 0.5   # tuned ! - more : more tolerant when going down
 
 REF_IOC = 0.
