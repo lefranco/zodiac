@@ -657,16 +657,16 @@ class Attacker:
             succeeded = self._go_up()
             if succeeded:
                 if VERBOSE:
-                    print(f"/", end='', flush=True)
+                    print("/", end='', flush=True)
             else:
                 # slightly down
                 succeeded = self._go_slightly_down()
                 if succeeded:
                     if VERBOSE:
-                        print(f"\\", end='', flush=True)
+                        print("\\", end='', flush=True)
                 else:
                     if VERBOSE:
-                        print(f"-", flush=True)
+                        print("-", flush=True)
 
                     print(f"Reached a peak at qual={self._overall_n_grams_frequency_quality}")
                     return
@@ -737,7 +737,7 @@ class Attacker:
                 number_climbs_left = MAX_ATTACKER_CLIMBS
 
                 if IMPATIENT:
-                    print(f"Putative solution below: ")
+                    print("Putative solution below: ")
                     solution = Solution(quality_reached, key_reached)
                     solution.print_solution(sys.stdout)
 
@@ -786,7 +786,7 @@ def main() -> None:
     bad_quality = args.bad_quality
     global NGRAMS
     if bad_quality:
-        print(f"INFORMATION: Cipher is bad quality.")
+        print("INFORMATION: Cipher is bad quality.")
     NGRAMS = Ngrams(ngrams_file, bad_quality)
     #  print(NGRAMS)
 

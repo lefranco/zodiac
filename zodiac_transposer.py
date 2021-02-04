@@ -66,11 +66,12 @@ class Cipher:
                         cipher = self._blocks[num_block][(cur_line, cur_col)]
                         self._transposed.append(cipher)
 
-                # just first block will be enough
-                # the second hs two issues :
+                # uncomment break line below
+                # so that just first block will be enough
+                # the second has two issues :
                 # the upper left if fixed
                 # one letter is ignored
-                break
+                #  break
 
             # for the last incomplete block
             # note : it is completely mixed

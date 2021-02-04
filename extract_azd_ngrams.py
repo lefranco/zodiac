@@ -9,11 +9,9 @@ sort -n <outputfile> -k 2 -r > <sorted_file>
 
 """
 
-import struct
 import argparse
 import typing
 import math
-import contextlib
 
 
 def ngram_from_file(input_file: str, n_value: int) -> typing.Generator[typing.Tuple[str, float], None, None]:
@@ -64,14 +62,14 @@ def main() -> None:
     args = parser.parse_args()
 
     input_file = args.input
-    n_value =  int(args.n_value)
-
+    n_value = int(args.n_value)
 
     output_file = args.output
     if output_file:
         with open(output_file, 'w') as file_handle:
             for ngram, freq in ngram_from_file(input_file, n_value):
                 file_handle.write(f"{ngram} {freq}\n")
+
 
 if __name__ == '__main__':
     main()

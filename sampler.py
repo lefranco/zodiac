@@ -33,7 +33,7 @@ class Plain:
                     only_ascii = nfkd_form.encode('ASCII', 'ignore')
                     only_ascii_str = only_ascii.decode()
                     # remove all bujt alphabet and spaces
-                    bad_chars = ''.join(list({ll for  ll in only_ascii_str if not (ll  in ALPHABET or ll == ' ')}))
+                    bad_chars = ''.join(list({ll for ll in only_ascii_str if not (ll in ALPHABET or ll == ' ')}))
                     my_table = only_ascii_str.maketrans(bad_chars, ' ' * len(bad_chars))
                     letters_spaces_only = only_ascii_str.translate(my_table)
                     # now we can work

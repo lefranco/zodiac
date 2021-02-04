@@ -526,7 +526,7 @@ class Attacker:
 
         # stats about the climb
         self._show_stats = show_stats
-        self._stats:typing.List[typing.Tuple[float, float]] = list()
+        self._stats: typing.List[typing.Tuple[float, float]] = list()
 
     def _check_n_gram_frequency_quality(self) -> None:
         """ Evaluates quality from n_gram frequency DEBUG """
@@ -920,7 +920,7 @@ def main() -> None:
     ngrams_file = args.ngrams
     bad_quality = args.bad_quality
     if bad_quality:
-        print(f"INFORMATION: Cipher is bad quality.")
+        print("INFORMATION: Cipher is bad quality.")
     global NGRAMS
     NGRAMS = Ngrams(ngrams_file, bad_quality)
     #  print(NGRAMS)

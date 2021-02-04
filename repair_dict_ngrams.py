@@ -32,7 +32,7 @@ class NgramsDict:
                 if size and len(entry) != size:
                     print(f"Warning: N-Gram frequency file line {num_line} discarded (bad size)")
                     continue
-                entry = entry.replace("'","")
+                entry = entry.replace("'", "")
                 frequency = int(frequency_str)
                 self._table[entry] += frequency  # n gram or dict entry may occur several times after removal of accents
 
