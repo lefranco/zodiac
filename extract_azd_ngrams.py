@@ -27,20 +27,15 @@ def ngram_from_file(input_file: str, n_value: int) -> typing.Generator[typing.Tu
             # return stuff
             freq = file_handler.read(1)
             if freq == b'':
-                print("end of file")
                 return
-
-            progress += 1
 
             # get value
             value = ord(freq)
-            if value == 0:
-                continue
-
-            # yield
-            yield ngram, int(math.exp(float(value) / 256.0) * 1000.)
+            if value != 0:
+                yield ngram, int(math.exp(float(value) / 256.0) * 1000.)
 
             # show progress
+            progress += 1
             if progress % 1000000 == 0:
                 print(f"{(progress/(26**n_value)) * 100:0.2f}%", end=' ', flush=True)
 
